@@ -1,215 +1,228 @@
 <?php
-/**
- * Plugin Name: RMGC Booking System
- * Plugin URI: https://royalmelbourne.com.au
- * Description: Booking system for Royal Melbourne Golf Club
- * Version: 1.0
- * Author: RMGC
- * Author URI: https://royalmelbourne.com.au
- * Text Domain: rmgc-booking
- */
+// [Previous code remains the same until admin menu...]
 
-if (!defined('ABSPATH')) {
-    exit;
+// Add admin menu
+function rmgc_add_admin_menu() {
+    add_menu_page(
+        'RMGC Booking',
+        'RMGC Booking',
+        'manage_options',
+        'rmgc-booking',
+        'rmgc_bookings_page',
+        'dashicons-calendar-alt'
+    );
+    
+    add_submenu_page(
+        'rmgc-booking',
+        'Settings',
+        'Settings',
+        'manage_options',
+        'rmgc-booking-settings',
+        'rmgc_settings_page'
+    );
 }
+add_action('admin_menu', 'rmgc_add_admin_menu');
 
-// Create the bookings table on plugin activation
-function rmgc_create_bookings_table() {
+// Bookings page
+function rmgc_bookings_page() {
     global $wpdb;
     $table_name = $wpdb->prefix . 'rmgc_bookings';
     
-    $charset_collate = $wpdb->get_charset_collate();
-
-    $sql = "CREATE TABLE IF NOT EXISTS $table_name (
-        id mediumint(9) NOT NULL AUTO_INCREMENT,
-        booking_date date NOT NULL,
-        players int(11) NOT NULL,
-        handicap int(11) NOT NULL,
-        email varchar(100) NOT NULL,
-        status varchar(20) NOT NULL DEFAULT 'pending',
-        created_at datetime DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY  (id)
-    ) $charset_collate;";
-
-    require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-    dbDelta($sql);
+    // Handle status updates
+    if (isset($_POST['booking_id']) && isset($_POST['status'])) {
+        $wpdb->update(
+            $table_name,
+            array('status' => sanitize_text_field($_POST['status'])),
+            array('id' => intval($_POST['booking_id']))
+        );
+        
+        // Send email notification if status changed to approved
+        if ($_POST['status'] === 'approved') {
+            $booking = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM $table_name WHERE id = %d",
+                intval($_POST['booking_id'])
+            ));
+            
+            if ($booking) {
+                $to = $booking->email;
+                $subject = 'Royal Melbourne Golf Club - Booking Approved';
+                $message = "Your booking request has been approved:\n\n";
+                $message .= "Date: " . $booking->booking_date . "\n";
+                $message .= "Players: " . $booking->players . "\n";
+                
+                wp_mail($to, $subject, $message);
+            }
+        }
+    }
     
-    // Add default notification email
-    add_option('rmgc_notification_emails', get_option('admin_email'));
-}
-register_activation_hook(__FILE__, 'rmgc_create_bookings_table');
-
-// Enqueue scripts and styles
-function rmgc_enqueue_scripts() {
-    wp_enqueue_script('jquery');
-    wp_enqueue_script('jquery-ui-core');
-    wp_enqueue_script('jquery-ui-datepicker');
-    wp_enqueue_style('jquery-ui-style', 'https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/themes/base/jquery-ui.min.css');
+    // Get bookings with pagination
+    $page = isset($_GET['paged']) ? max(1, intval($_GET['paged'])) : 1;
+    $items_per_page = 20;
+    $offset = ($page - 1) * $items_per_page;
     
-    wp_enqueue_script('google-recaptcha', 'https://www.google.com/recaptcha/api.js');
-    
-    wp_enqueue_script('rmgc-booking', plugin_dir_url(__FILE__) . 'js/booking.js', array('jquery', 'jquery-ui-datepicker'), time(), true);
-    
-    wp_localize_script('rmgc-booking', 'rmgcApi', array(
-        'apiUrl' => get_option('rmgc_api_url'),
-        'apiKey' => get_option('rmgc_api_key'),
-        'siteUrl' => get_site_url(),
-        'recaptchaSiteKey' => get_option('rmgc_recaptcha_site_key')
+    $bookings = $wpdb->get_results($wpdb->prepare(
+        "SELECT * FROM $table_name ORDER BY created_at DESC LIMIT %d OFFSET %d",
+        $items_per_page,
+        $offset
     ));
-}
-add_action('wp_enqueue_scripts', 'rmgc_enqueue_scripts');
-
-// Add the booking form shortcode
-function rmgc_booking_form_shortcode() {
-    return '
-        <div id="rmgc-booking-form" class="rmgc-booking-container">
-            <form id="rmgc-booking" class="rmgc-form">
-                <div class="form-group calendar-container">
-                    <h3>Select Date</h3>
-                    <div id="embedded-calendar"></div>
-                    <input type="hidden" id="booking-date" name="date" required>
-                    <small>Available: Mondays, Tuesdays, and Fridays</small>
+    
+    $total_items = $wpdb->get_var("SELECT COUNT(*) FROM $table_name");
+    $total_pages = ceil($total_items / $items_per_page);
+    
+    ?>
+    <div class="wrap">
+        <h1>Booking Requests</h1>
+        
+        <table class="wp-list-table widefat fixed striped">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Players</th>
+                    <th>Handicap</th>
+                    <th>Email</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if (empty($bookings)): ?>
+                    <tr>
+                        <td colspan="7">No booking requests found.</td>
+                    </tr>
+                <?php else: ?>
+                    <?php foreach ($bookings as $booking): ?>
+                        <tr>
+                            <td><?php echo esc_html($booking->booking_date); ?></td>
+                            <td><?php echo esc_html($booking->players); ?></td>
+                            <td><?php echo esc_html($booking->handicap); ?></td>
+                            <td><?php echo esc_html($booking->email); ?></td>
+                            <td><?php echo esc_html($booking->status); ?></td>
+                            <td><?php echo esc_html($booking->created_at); ?></td>
+                            <td>
+                                <form method="post" style="display:inline;">
+                                    <input type="hidden" name="booking_id" value="<?php echo esc_attr($booking->id); ?>">
+                                    <select name="status" onchange="this.form.submit()" style="width: 100px;">
+                                        <option value="pending" <?php selected($booking->status, 'pending'); ?>>Pending</option>
+                                        <option value="approved" <?php selected($booking->status, 'approved'); ?>>Approved</option>
+                                        <option value="rejected" <?php selected($booking->status, 'rejected'); ?>>Rejected</option>
+                                    </select>
+                                </form>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </tbody>
+        </table>
+        
+        <?php if ($total_pages > 1): ?>
+            <div class="tablenav bottom">
+                <div class="tablenav-pages">
+                    <?php
+                    echo paginate_links(array(
+                        'base' => add_query_arg('paged', '%#%'),
+                        'format' => '',
+                        'prev_text' => '&laquo;',
+                        'next_text' => '&raquo;',
+                        'total' => $total_pages,
+                        'current' => $page,
+                    ));
+                    ?>
                 </div>
-                
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="players">Number of Players:</label>
-                        <select id="players" name="players" required>
-                            <option value="">Select players</option>
-                            <option value="1">1 Player</option>
-                            <option value="2">2 Players</option>
-                            <option value="3">3 Players</option>
-                            <option value="4">4 Players</option>
-                        </select>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="handicap">Highest Handicap:</label>
-                        <input type="number" id="handicap" name="handicap" min="0" max="24" required>
-                        <small>Maximum handicap allowed is 24</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="email">Email Address:</label>
-                        <input type="email" id="email" name="email" required>
-                    </div>
-                </div>
-                
-                <div class="g-recaptcha" data-sitekey="' . esc_attr(get_option('rmgc_recaptcha_site_key')) . '"></div>
-                
-                <button type="submit" class="submit-button">Request Booking</button>
-            </form>
-            <div id="rmgc-booking-message"></div>
-        </div>
-        <style>
-            .rmgc-form {
-                max-width: 800px;
-                margin: 20px auto;
-                padding: 20px;
-                background: #fff;
-                border-radius: 8px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            }
-            .calendar-container {
-                margin-bottom: 30px;
-            }
-            #embedded-calendar {
-                width: 100%;
-                margin-bottom: 15px;
-            }
-            .form-row {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 20px;
-                margin-bottom: 20px;
-            }
-            .form-group {
-                margin-bottom: 20px;
-            }
-            .form-group label {
-                display: block;
-                margin-bottom: 5px;
-                font-weight: bold;
-                color: #333;
-            }
-            .form-group input,
-            .form-group select {
-                width: 100%;
-                padding: 8px;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                box-sizing: border-box;
-            }
-            .form-group small {
-                display: block;
-                color: #666;
-                margin-top: 5px;
-            }
-            .submit-button {
-                background-color: #005b94;
-                color: white;
-                padding: 12px 24px;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
-                width: 100%;
-                font-size: 16px;
-                margin-top: 20px;
-            }
-            .submit-button:hover {
-                background-color: #004675;
-            }
-            #rmgc-booking-message {
-                margin-top: 20px;
-                padding: 15px;
-                border-radius: 4px;
-                text-align: center;
-            }
-            #rmgc-booking-message.error {
-                background-color: #ffe6e6;
-                color: #d63031;
-                border: 1px solid #fab1a0;
-            }
-            #rmgc-booking-message.success {
-                background-color: #e6ffe6;
-                color: #27ae60;
-                border: 1px solid #a8e6cf;
-            }
-            .ui-datepicker {
-                width: 100%;
-                padding: 15px;
-                box-sizing: border-box;
-            }
-            .ui-datepicker table {
-                width: 100%;
-                font-size: 14px;
-            }
-            .ui-datepicker th {
-                background: #f5f5f5;
-                padding: 7px;
-                text-align: center;
-            }
-            .ui-datepicker td {
-                padding: 3px;
-                text-align: center;
-            }
-            .ui-datepicker td span,
-            .ui-datepicker td a {
-                display: block;
-                padding: 8px;
-                text-align: center;
-                text-decoration: none;
-                border-radius: 4px;
-            }
-            .ui-datepicker-unselectable.ui-state-disabled {
-                opacity: 0.3;
-            }
-            .g-recaptcha {
-                margin: 20px 0;
-                display: flex;
-                justify-content: center;
-            }
-        </style>
-    ';
+            </div>
+        <?php endif; ?>
+    </div>
+    <?php
 }
-add_shortcode('rmgc_booking_form', 'rmgc_booking_form_shortcode');
+
+// Settings page
+function rmgc_settings_page() {
+    if (isset($_POST['rmgc_save_settings'])) {
+        update_option('rmgc_api_url', sanitize_text_field($_POST['rmgc_api_url']));
+        update_option('rmgc_api_key', sanitize_text_field($_POST['rmgc_api_key']));
+        update_option('rmgc_notification_emails', sanitize_text_field($_POST['rmgc_notification_emails']));
+        update_option('rmgc_recaptcha_site_key', sanitize_text_field($_POST['rmgc_recaptcha_site_key']));
+        update_option('rmgc_recaptcha_secret_key', sanitize_text_field($_POST['rmgc_recaptcha_secret_key']));
+        echo '<div class="updated"><p>Settings saved!</p></div>';
+    }
+    
+    ?>
+    <div class="wrap">
+        <h2>RMGC Booking System Settings</h2>
+        
+        <form method="post">
+            <table class="form-table">
+                <tr>
+                    <th><label for="rmgc_api_url">API URL:</label></th>
+                    <td>
+                        <input type="text" id="rmgc_api_url" name="rmgc_api_url" 
+                               value="<?php echo esc_attr(get_option('rmgc_api_url')); ?>" 
+                               class="regular-text">
+                        <p class="description">Example: http://localhost:3000</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="rmgc_api_key">API Key:</label></th>
+                    <td>
+                        <input type="text" id="rmgc_api_key" name="rmgc_api_key" 
+                               value="<?php echo esc_attr(get_option('rmgc_api_key')); ?>" 
+                               class="regular-text">
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="rmgc_notification_emails">Notification Emails:</label></th>
+                    <td>
+                        <input type="text" id="rmgc_notification_emails" name="rmgc_notification_emails" 
+                               value="<?php echo esc_attr(get_option('rmgc_notification_emails')); ?>" 
+                               class="regular-text">
+                        <p class="description">Comma-separated list of email addresses to receive booking notifications</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="rmgc_recaptcha_site_key">reCAPTCHA Site Key:</label></th>
+                    <td>
+                        <input type="text" id="rmgc_recaptcha_site_key" name="rmgc_recaptcha_site_key" 
+                               value="<?php echo esc_attr(get_option('rmgc_recaptcha_site_key')); ?>" 
+                               class="regular-text">
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="rmgc_recaptcha_secret_key">reCAPTCHA Secret Key:</label></th>
+                    <td>
+                        <input type="text" id="rmgc_recaptcha_secret_key" name="rmgc_recaptcha_secret_key" 
+                               value="<?php echo esc_attr(get_option('rmgc_recaptcha_secret_key')); ?>" 
+                               class="regular-text">
+                        <p class="description">Get your reCAPTCHA keys from <a href="https://www.google.com/recaptcha/admin" target="_blank">Google reCAPTCHA</a></p>
+                    </td>
+                </tr>
+            </table>
+            
+            <p class="submit">
+                <input type="submit" name="rmgc_save_settings" class="button-primary" value="Save Settings">
+            </p>
+        </form>
+        
+        <h3>Shortcode</h3>
+        <p>Use this shortcode to display the booking form: <code>[rmgc_booking_form]</code></p>
+    </div>
+    <?php
+}
+
+// Email notification function
+function rmgc_send_notification($booking_data) {
+    $to = get_option('rmgc_notification_emails');
+    $subject = 'New Booking Request - Royal Melbourne Golf Club';
+    
+    $message = "A new booking request has been received:\n\n";
+    $message .= "Date: " . $booking_data['date'] . "\n";
+    $message .= "Players: " . $booking_data['players'] . "\n";
+    $message .= "Handicap: " . $booking_data['handicap'] . "\n";
+    $message .= "Email: " . $booking_data['email'] . "\n\n";
+    $message .= "View all bookings in the WordPress admin panel.";
+    
+    $headers = array('Content-Type: text/plain; charset=UTF-8');
+    
+    wp_mail($to, $subject, $message, $headers);
+}
+
+?>
