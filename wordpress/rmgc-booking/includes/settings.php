@@ -1,5 +1,29 @@
 <?php
-// Settings page
+
+function rmgc_send_notification($booking_data) {
+    $to = get_option('rmgc_notification_emails');
+    $subject = 'New Booking Request - Royal Melbourne Golf Club';
+    
+    $message = "A new booking request has been received:\n\n";
+    $message .= "Date: " . $booking_data['date'] . "\n";
+    $message .= "Players: " . $booking_data['players'] . "\n";
+    $message .= "Contact Details:\n";
+    $message .= "Name: " . $booking_data['firstName'] . " " . $booking_data['lastName'] . "\n";
+    $message .= "Email: " . $booking_data['email'] . "\n";
+    $message .= "Phone: " . $booking_data['phone'] . "\n";
+    $message .= "State: " . $booking_data['state'] . "\n";
+    $message .= "Country: " . $booking_data['country'] . "\n\n";
+    $message .= "Golf Details:\n";
+    $message .= "Club Name: " . $booking_data['clubName'] . "\n";
+    $message .= "Handicap: " . $booking_data['handicap'] . "\n";
+    $message .= "Club State: " . $booking_data['clubState'] . "\n";
+    $message .= "Club Country: " . $booking_data['clubCountry'] . "\n";
+    
+    $headers = array('Content-Type: text/plain; charset=UTF-8');
+    
+    wp_mail($to, $subject, $message, $headers);
+}
+
 function rmgc_settings_page() {
     if (isset($_POST['rmgc_save_settings'])) {
         update_option('rmgc_api_url', sanitize_text_field($_POST['rmgc_api_url']));
@@ -68,39 +92,6 @@ function rmgc_settings_page() {
         
         <h3>Shortcode</h3>
         <p>Use this shortcode to display the booking form: <code>[rmgc_booking_form]</code></p>
-        
-        <style>
-            .rmgc-settings-form {
-                max-width: 800px;
-                margin-top: 20px;
-            }
-            .rmgc-settings-form .form-table {
-                margin-top: 20px;
-            }
-            .rmgc-settings-form .form-table th {
-                padding-top: 20px;
-            }
-            .rmgc-settings-form .description {
-                margin-top: 5px;
-            }
-        </style>
     </div>
     <?php
-}
-
-// Email notification function
-function rmgc_send_notification($booking_data) {
-    $to = get_option('rmgc_notification_emails');
-    $subject = 'New Booking Request - Royal Melbourne Golf Club';
-    
-    $message = "A new booking request has been received:\n\n";
-    $message .= "Date: " . $booking_data['date'] . "\n";
-    $message .= "Players: " . $booking_data['players'] . "\n";
-    $message .= "Handicap: " . $booking_data['handicap'] . "\n";
-    $message .= "Email: " . $booking_data['email'] . "\n\n";
-    $message .= "View all bookings in the WordPress admin panel.";
-    
-    $headers = array('Content-Type: text/plain; charset=UTF-8');
-    
-    wp_mail($to, $subject, $message, $headers);
 }
