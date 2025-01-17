@@ -13,7 +13,9 @@ if (!defined('ABSPATH')) {
 
 // Add the booking form shortcode
 function rmgc_booking_form_shortcode() {
-    wp_enqueue_script('rmgc-booking', plugin_dir_url(__FILE__) . 'js/booking.js', array('jquery'), '1.0', true);
+    wp_enqueue_script('jquery-ui-datepicker');
+    wp_enqueue_style('jquery-ui', 'https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css');
+    wp_enqueue_script('rmgc-booking', plugin_dir_url(__FILE__) . 'js/booking.js', array('jquery', 'jquery-ui-datepicker'), '1.0', true);
     
     // Pass API details to JavaScript
     wp_localize_script('rmgc-booking', 'rmgcApi', array(
@@ -25,24 +27,92 @@ function rmgc_booking_form_shortcode() {
     // Return the booking form HTML
     return '
         <div id="rmgc-booking-form" class="rmgc-booking-container">
-            <div id="rmgc-date-picker"></div>
-            <form id="rmgc-booking">
+            <form id="rmgc-booking" class="rmgc-form">
+                <div class="form-group">
+                    <label for="booking-date">Select Date:</label>
+                    <input type="text" id="booking-date" name="date" class="datepicker" readonly required>
+                    <small>Available: Mondays, Tuesdays, and Fridays</small>
+                </div>
+                
                 <div class="form-group">
                     <label for="players">Number of Players:</label>
                     <select id="players" name="players" required>
+                        <option value="">Select number of players</option>
                         <option value="2">2 Players</option>
                         <option value="3">3 Players</option>
                         <option value="4">4 Players</option>
                     </select>
                 </div>
+                
                 <div class="form-group">
                     <label for="handicap">Highest Handicap:</label>
                     <input type="number" id="handicap" name="handicap" min="0" max="24" required>
+                    <small>Maximum handicap allowed is 24</small>
                 </div>
-                <button type="submit">Request Booking</button>
+                
+                <button type="submit" class="submit-button">Request Booking</button>
             </form>
             <div id="rmgc-booking-message"></div>
         </div>
+        <style>
+            .rmgc-form {
+                max-width: 500px;
+                margin: 20px auto;
+            }
+            .rmgc-form .form-group {
+                margin-bottom: 20px;
+            }
+            .rmgc-form label {
+                display: block;
+                margin-bottom: 5px;
+                font-weight: bold;
+            }
+            .rmgc-form input[type="text"],
+            .rmgc-form input[type="number"],
+            .rmgc-form select {
+                width: 100%;
+                padding: 8px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+            }
+            .rmgc-form small {
+                display: block;
+                color: #666;
+                margin-top: 5px;
+            }
+            .rmgc-form .submit-button {
+                background-color: #005b94;
+                color: white;
+                padding: 10px 20px;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+            }
+            .rmgc-form .submit-button:hover {
+                background-color: #004675;
+            }
+            #rmgc-booking-message {
+                margin-top: 20px;
+                padding: 10px;
+                border-radius: 4px;
+            }
+            #rmgc-booking-message.error {
+                background-color: #ffe6e6;
+                color: #d63031;
+                border: 1px solid #fab1a0;
+            }
+            #rmgc-booking-message.success {
+                background-color: #e6ffe6;
+                color: #27ae60;
+                border: 1px solid #a8e6cf;
+            }
+            .ui-datepicker {
+                background-color: white;
+                padding: 10px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+            }
+        </style>
     ';
 }
 add_shortcode('rmgc_booking_form', 'rmgc_booking_form_shortcode');
@@ -80,6 +150,7 @@ function rmgc_settings_page() {
                         <input type="text" id="rmgc_api_url" name="rmgc_api_url" 
                                value="<?php echo esc_attr(get_option('rmgc_api_url')); ?>" 
                                class="regular-text">
+                        <p class="description">Example: http://localhost:3000</p>
                     </td>
                 </tr>
                 <tr>
