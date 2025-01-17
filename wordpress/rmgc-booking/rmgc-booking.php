@@ -11,11 +11,16 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-// Add the booking form shortcode
-function rmgc_booking_form_shortcode() {
+// Enqueue scripts and styles
+function rmgc_enqueue_scripts() {
+    // Enqueue jQuery UI and theme
+    wp_enqueue_script('jquery');
+    wp_enqueue_script('jquery-ui-core');
     wp_enqueue_script('jquery-ui-datepicker');
-    wp_enqueue_style('jquery-ui', 'https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css');
-    wp_enqueue_script('rmgc-booking', plugin_dir_url(__FILE__) . 'js/booking.js', array('jquery', 'jquery-ui-datepicker'), '1.0', true);
+    wp_enqueue_style('jquery-ui-style', 'https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/themes/base/jquery-ui.min.css', array(), '1.13.2');
+    
+    // Enqueue our custom script
+    wp_enqueue_script('rmgc-booking', plugin_dir_url(__FILE__) . 'js/booking.js', array('jquery', 'jquery-ui-datepicker'), time(), true);
     
     // Pass API details to JavaScript
     wp_localize_script('rmgc-booking', 'rmgcApi', array(
@@ -23,7 +28,11 @@ function rmgc_booking_form_shortcode() {
         'apiKey' => get_option('rmgc_api_key'),
         'siteUrl' => get_site_url()
     ));
+}
+add_action('wp_enqueue_scripts', 'rmgc_enqueue_scripts');
 
+// Add the booking form shortcode
+function rmgc_booking_form_shortcode() {
     // Return the booking form HTML
     return '
         <div id="rmgc-booking-form" class="rmgc-booking-container">
@@ -74,6 +83,7 @@ function rmgc_booking_form_shortcode() {
                 padding: 8px;
                 border: 1px solid #ddd;
                 border-radius: 4px;
+                box-sizing: border-box;
             }
             .rmgc-form small {
                 display: block;
@@ -106,11 +116,52 @@ function rmgc_booking_form_shortcode() {
                 color: #27ae60;
                 border: 1px solid #a8e6cf;
             }
+            /* Date picker styles */
             .ui-datepicker {
                 background-color: white;
                 padding: 10px;
                 border: 1px solid #ddd;
                 border-radius: 4px;
+                display: none;
+            }
+            .ui-datepicker .ui-datepicker-header {
+                background: #005b94;
+                color: white;
+                padding: 5px;
+                border-radius: 3px;
+            }
+            .ui-datepicker .ui-datepicker-title {
+                text-align: center;
+            }
+            .ui-datepicker .ui-datepicker-prev,
+            .ui-datepicker .ui-datepicker-next {
+                cursor: pointer;
+                position: absolute;
+                top: 5px;
+                width: 20px;
+                height: 20px;
+                text-align: center;
+                color: white;
+            }
+            .ui-datepicker .ui-datepicker-prev {
+                left: 5px;
+            }
+            .ui-datepicker .ui-datepicker-next {
+                right: 5px;
+            }
+            .ui-datepicker td {
+                padding: 3px;
+                text-align: center;
+            }
+            .ui-datepicker td span,
+            .ui-datepicker td a {
+                display: block;
+                padding: 5px;
+                text-decoration: none;
+                text-align: center;
+            }
+            .ui-datepicker-unselectable.ui-state-disabled {
+                color: #ccc;
             }
         </style>
     ';
