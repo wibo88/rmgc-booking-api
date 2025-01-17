@@ -1,89 +1,60 @@
 <?php
-// [Previous code remains the same until the settings page form...]
+/**
+ * Plugin Name: RMGC Booking System
+ * Plugin URI: https://royalmelbourne.com.au
+ * Description: Booking system for Royal Melbourne Golf Club
+ * Version: 1.0
+ * Author: RMGC
+ * Author URI: https://royalmelbourne.com.au
+ * Text Domain: rmgc-booking
+ */
 
-// Settings page
-function rmgc_settings_page() {
-    if (isset($_POST['rmgc_save_settings'])) {
-        update_option('rmgc_api_url', sanitize_text_field($_POST['rmgc_api_url']));
-        update_option('rmgc_api_key', sanitize_text_field($_POST['rmgc_api_key']));
-        update_option('rmgc_notification_emails', sanitize_text_field($_POST['rmgc_notification_emails']));
-        update_option('rmgc_recaptcha_site_key', sanitize_text_field($_POST['rmgc_recaptcha_site_key']));
-        update_option('rmgc_recaptcha_secret_key', sanitize_text_field($_POST['rmgc_recaptcha_secret_key']));
-        echo '<div class="updated"><p>Settings saved!</p></div>';
-    }
-    ?>
-    <div class="wrap">
-        <h2>RMGC Booking System Settings</h2>
-        <form method="post">
-            <table class="form-table">
-                <tr>
-                    <th><label for="rmgc_api_url">API URL:</label></th>
-                    <td>
-                        <input type="text" id="rmgc_api_url" name="rmgc_api_url" 
-                               value="<?php echo esc_attr(get_option('rmgc_api_url')); ?>" 
-                               class="regular-text">
-                        <p class="description">Example: http://localhost:3000</p>
-                    </td>
-                </tr>
-                <tr>
-                    <th><label for="rmgc_api_key">API Key:</label></th>
-                    <td>
-                        <input type="text" id="rmgc_api_key" name="rmgc_api_key" 
-                               value="<?php echo esc_attr(get_option('rmgc_api_key')); ?>" 
-                               class="regular-text">
-                    </td>
-                </tr>
-                <tr>
-                    <th><label for="rmgc_notification_emails">Notification Emails:</label></th>
-                    <td>
-                        <input type="text" id="rmgc_notification_emails" name="rmgc_notification_emails" 
-                               value="<?php echo esc_attr(get_option('rmgc_notification_emails')); ?>" 
-                               class="regular-text">
-                        <p class="description">Comma-separated list of email addresses to receive booking notifications</p>
-                    </td>
-                </tr>
-                <tr>
-                    <th><label for="rmgc_recaptcha_site_key">reCAPTCHA Site Key:</label></th>
-                    <td>
-                        <input type="text" id="rmgc_recaptcha_site_key" name="rmgc_recaptcha_site_key" 
-                               value="<?php echo esc_attr(get_option('rmgc_recaptcha_site_key')); ?>" 
-                               class="regular-text">
-                    </td>
-                </tr>
-                <tr>
-                    <th><label for="rmgc_recaptcha_secret_key">reCAPTCHA Secret Key:</label></th>
-                    <td>
-                        <input type="text" id="rmgc_recaptcha_secret_key" name="rmgc_recaptcha_secret_key" 
-                               value="<?php echo esc_attr(get_option('rmgc_recaptcha_secret_key')); ?>" 
-                               class="regular-text">
-                        <p class="description">Get your reCAPTCHA keys from <a href="https://www.google.com/recaptcha/admin" target="_blank">Google reCAPTCHA</a></p>
-                    </td>
-                </tr>
-            </table>
-            <p>
-                <input type="submit" name="rmgc_save_settings" class="button-primary" value="Save Settings">
-            </p>
-        </form>
-        <h3>Shortcode</h3>
-        <p>Use this shortcode to display the booking form: <code>[rmgc_booking_form]</code></p>
-    </div>
-    <?php
+if (!defined('ABSPATH')) {
+    exit;
 }
 
-// Email notification function
-function rmgc_send_notification($booking_data) {
-    $to = get_option('rmgc_notification_emails');
-    $subject = 'New Booking Request - Royal Melbourne Golf Club';
+// Create the bookings table on plugin activation
+function rmgc_create_bookings_table() {
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'rmgc_bookings';
     
-    $message = "A new booking request has been received:\n\n";
-    $message .= "Date: " . $booking_data['date'] . "\n";
-    $message .= "Players: " . $booking_data['players'] . "\n";
-    $message .= "Handicap: " . $booking_data['handicap'] . "\n";
-    $message .= "Email: " . $booking_data['email'] . "\n\n";
-    $message .= "View all bookings in the WordPress admin panel.";
+    $charset_collate = $wpdb->get_charset_collate();
+
+    $sql = "CREATE TABLE IF NOT EXISTS $table_name (
+        id mediumint(9) NOT NULL AUTO_INCREMENT,
+        booking_date date NOT NULL,
+        players int(11) NOT NULL,
+        handicap int(11) NOT NULL,
+        email varchar(100) NOT NULL,
+        status varchar(20) NOT NULL DEFAULT 'pending',
+        created_at datetime DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id)
+    ) $charset_collate;";
+
+    require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+    dbDelta($sql);
     
-    $headers = array('Content-Type: text/plain; charset=UTF-8');
-    
-    wp_mail($to, $subject, $message, $headers);
+    // Add default notification email
+    add_option('rmgc_notification_emails', get_option('admin_email'));
 }
-?>
+register_activation_hook(__FILE__, 'rmgc_create_bookings_table');
+
+// Enqueue scripts and styles
+function rmgc_enqueue_scripts() {
+    wp_enqueue_script('jquery');
+    wp_enqueue_script('jquery-ui-core');
+    wp_enqueue_script('jquery-ui-datepicker');
+    wp_enqueue_style('jquery-ui-style', 'https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/themes/base/jquery-ui.min.css');
+    
+    wp_enqueue_script('google-recaptcha', 'https://www.google.com/recaptcha/api.js');
+    
+    wp_enqueue_script('rmgc-booking', plugin_dir_url(__FILE__) . 'js/booking.js', array('jquery', 'jquery-ui-datepicker'), time(), true);
+    
+    wp_localize_script('rmgc-booking', 'rmgcApi', array(
+        'apiUrl' => get_option('rmgc_api_url'),
+        'apiKey' => get_option('rmgc_api_key'),
+        'siteUrl' => get_site_url(),
+        'recaptchaSiteKey' => get_option('rmgc_recaptcha_site_key')
+    ));
+}
+add_action('wp_enqueue_scripts', 'rmgc_enqueue_scripts');
