@@ -18,3 +18,9 @@ require_once plugin_dir_path(__FILE__) . 'includes/init.php';
 require_once plugin_dir_path(__FILE__) . 'includes/admin-menu.php';
 require_once plugin_dir_path(__FILE__) . 'includes/shortcodes.php';
 require_once plugin_dir_path(__FILE__) . 'includes/settings.php';
+require_once plugin_dir_path(__FILE__) . 'includes/email.php';
+
+// Add action to send email notification when API callback is successful
+function rmgc_handle_booking_success($booking) {
+    rmgc_send_booking_notification($booking);
+}
