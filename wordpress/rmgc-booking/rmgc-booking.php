@@ -19,8 +19,22 @@ require_once plugin_dir_path(__FILE__) . 'includes/admin-menu.php';
 require_once plugin_dir_path(__FILE__) . 'includes/shortcodes.php';
 require_once plugin_dir_path(__FILE__) . 'includes/settings.php';
 require_once plugin_dir_path(__FILE__) . 'includes/email.php';
+require_once plugin_dir_path(__FILE__) . 'includes/database.php';
+require_once plugin_dir_path(__FILE__) . 'includes/api.php';
 
-// Add action to send email notification when API callback is successful
-function rmgc_handle_booking_success($booking) {
-    rmgc_send_booking_notification($booking);
+// Register activation hook
+register_activation_hook(__FILE__, 'rmgc_activate_plugin');
+
+function rmgc_activate_plugin() {
+    // Create database tables
+    rmgc_create_bookings_table();
 }
+
+// Initialize nonce for AJAX
+function rmgc_add_nonce() {
+    wp_localize_script('rmgc-booking-js', 'rmgcAjax', array(
+        'ajaxurl' => admin_url('admin-ajax.php'),
+        'nonce' => wp_create_nonce('rmgc_booking_nonce')
+    ));
+}
+add_action('wp_enqueue_scripts', 'rmgc_add_nonce');
