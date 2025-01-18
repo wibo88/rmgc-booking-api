@@ -1,86 +1,122 @@
 <?php
-
-function rmgc_send_notification($booking_data) {
-    $to = get_option('rmgc_notification_emails');
-    $subject = 'New Booking Request - Royal Melbourne Golf Club';
-    
-    $message = "A new booking request has been received:\n\n";
-    $message .= "Date: " . $booking_data['date'] . "\n";
-    $message .= "Players: " . $booking_data['players'] . "\n";
-    $message .= "Contact Details:\n";
-    $message .= "Name: " . $booking_data['firstName'] . " " . $booking_data['lastName'] . "\n";
-    $message .= "Email: " . $booking_data['email'] . "\n";
-    $message .= "Phone: " . $booking_data['phone'] . "\n";
-    $message .= "State: " . $booking_data['state'] . "\n";
-    $message .= "Country: " . $booking_data['country'] . "\n\n";
-    $message .= "Golf Details:\n";
-    $message .= "Club Name: " . $booking_data['clubName'] . "\n";
-    $message .= "Handicap: " . $booking_data['handicap'] . "\n";
-    $message .= "Club State: " . $booking_data['clubState'] . "\n";
-    $message .= "Club Country: " . $booking_data['clubCountry'] . "\n";
-    
-    $headers = array('Content-Type: text/plain; charset=UTF-8');
-    
-    wp_mail($to, $subject, $message, $headers);
+// Register settings
+function rmgc_register_settings() {
+    register_setting('rmgc_settings', 'rmgc_api_url');
+    register_setting('rmgc_settings', 'rmgc_api_key');
+    register_setting('rmgc_settings', 'rmgc_recaptcha_site_key');
+    register_setting('rmgc_settings', 'rmgc_recaptcha_secret_key');
+    register_setting('rmgc_settings', 'rmgc_notification_email');
+    register_setting('rmgc_settings', 'rmgc_email_from_name');
+    register_setting('rmgc_settings', 'rmgc_email_from_address');
 }
+add_action('admin_init', 'rmgc_register_settings');
 
-function rmgc_settings_page() {
+// Settings page content
+function rmgc_booking_settings_page() {
+    if (!current_user_can('manage_options')) {
+        return;
+    }
+
+    $notification_email = get_option('rmgc_notification_email', get_option('admin_email'));
+    $email_from_name = get_option('rmgc_email_from_name', get_bloginfo('name'));
+    $email_from_address = get_option('rmgc_email_from_address', get_option('admin_email'));
+
     if (isset($_POST['rmgc_save_settings'])) {
+        if (!isset($_POST['rmgc_settings_nonce']) || !wp_verify_nonce($_POST['rmgc_settings_nonce'], 'rmgc_save_settings')) {
+            wp_die('Invalid nonce');
+        }
+
         update_option('rmgc_api_url', sanitize_text_field($_POST['rmgc_api_url']));
         update_option('rmgc_api_key', sanitize_text_field($_POST['rmgc_api_key']));
-        update_option('rmgc_notification_emails', sanitize_text_field($_POST['rmgc_notification_emails']));
         update_option('rmgc_recaptcha_site_key', sanitize_text_field($_POST['rmgc_recaptcha_site_key']));
         update_option('rmgc_recaptcha_secret_key', sanitize_text_field($_POST['rmgc_recaptcha_secret_key']));
-        echo '<div class="updated"><p>Settings saved!</p></div>';
+        update_option('rmgc_notification_email', sanitize_email($_POST['rmgc_notification_email']));
+        update_option('rmgc_email_from_name', sanitize_text_field($_POST['rmgc_email_from_name']));
+        update_option('rmgc_email_from_address', sanitize_email($_POST['rmgc_email_from_address']));
+
+        echo '<div class="notice notice-success"><p>Settings saved successfully!</p></div>';
     }
-    
     ?>
     <div class="wrap">
-        <h2>RMGC Booking System Settings</h2>
-        
-        <form method="post" class="rmgc-settings-form">
+        <h1>RMGC Booking Settings</h1>
+        <form method="post" action="">
+            <?php wp_nonce_field('rmgc_save_settings', 'rmgc_settings_nonce'); ?>
+            
+            <h2>API Configuration</h2>
             <table class="form-table">
                 <tr>
-                    <th><label for="rmgc_api_url">API URL:</label></th>
+                    <th scope="row">
+                        <label for="rmgc_api_url">API URL</label>
+                    </th>
                     <td>
-                        <input type="text" id="rmgc_api_url" name="rmgc_api_url" 
-                               value="<?php echo esc_attr(get_option('rmgc_api_url')); ?>" 
-                               class="regular-text">
-                        <p class="description">Example: http://localhost:3000</p>
+                        <input type="text" id="rmgc_api_url" name="rmgc_api_url" value="<?php echo esc_attr(get_option('rmgc_api_url')); ?>" class="regular-text">
+                        <p class="description">The URL of your booking API endpoint (e.g., http://localhost:3000)</p>
                     </td>
                 </tr>
+                
                 <tr>
-                    <th><label for="rmgc_api_key">API Key:</label></th>
+                    <th scope="row">
+                        <label for="rmgc_api_key">API Key</label>
+                    </th>
                     <td>
-                        <input type="text" id="rmgc_api_key" name="rmgc_api_key" 
-                               value="<?php echo esc_attr(get_option('rmgc_api_key')); ?>" 
-                               class="regular-text">
+                        <input type="password" id="rmgc_api_key" name="rmgc_api_key" value="<?php echo esc_attr(get_option('rmgc_api_key')); ?>" class="regular-text">
+                        <p class="description">Your API authentication key</p>
                     </td>
                 </tr>
+            </table>
+
+            <h2>Email Configuration</h2>
+            <table class="form-table">
                 <tr>
-                    <th><label for="rmgc_notification_emails">Notification Emails:</label></th>
+                    <th scope="row">
+                        <label for="rmgc_notification_email">Notification Email</label>
+                    </th>
                     <td>
-                        <input type="text" id="rmgc_notification_emails" name="rmgc_notification_emails" 
-                               value="<?php echo esc_attr(get_option('rmgc_notification_emails')); ?>" 
-                               class="regular-text">
-                        <p class="description">Comma-separated list of email addresses to receive booking notifications</p>
+                        <input type="email" id="rmgc_notification_email" name="rmgc_notification_email" value="<?php echo esc_attr($notification_email); ?>" class="regular-text">
+                        <p class="description">Email address to receive booking notifications</p>
                     </td>
                 </tr>
+                
                 <tr>
-                    <th><label for="rmgc_recaptcha_site_key">reCAPTCHA Site Key:</label></th>
+                    <th scope="row">
+                        <label for="rmgc_email_from_name">From Name</label>
+                    </th>
                     <td>
-                        <input type="text" id="rmgc_recaptcha_site_key" name="rmgc_recaptcha_site_key" 
-                               value="<?php echo esc_attr(get_option('rmgc_recaptcha_site_key')); ?>" 
-                               class="regular-text">
+                        <input type="text" id="rmgc_email_from_name" name="rmgc_email_from_name" value="<?php echo esc_attr($email_from_name); ?>" class="regular-text">
+                        <p class="description">Name to appear in the From field of notification emails</p>
                     </td>
                 </tr>
+                
                 <tr>
-                    <th><label for="rmgc_recaptcha_secret_key">reCAPTCHA Secret Key:</label></th>
+                    <th scope="row">
+                        <label for="rmgc_email_from_address">From Email</label>
+                    </th>
                     <td>
-                        <input type="text" id="rmgc_recaptcha_secret_key" name="rmgc_recaptcha_secret_key" 
-                               value="<?php echo esc_attr(get_option('rmgc_recaptcha_secret_key')); ?>" 
-                               class="regular-text">
-                        <p class="description">Get your reCAPTCHA keys from <a href="https://www.google.com/recaptcha/admin" target="_blank">Google reCAPTCHA</a></p>
+                        <input type="email" id="rmgc_email_from_address" name="rmgc_email_from_address" value="<?php echo esc_attr($email_from_address); ?>" class="regular-text">
+                        <p class="description">Email address to send notifications from</p>
+                    </td>
+                </tr>
+            </table>
+            
+            <h2>reCAPTCHA Configuration</h2>
+            <table class="form-table">
+                <tr>
+                    <th scope="row">
+                        <label for="rmgc_recaptcha_site_key">ReCAPTCHA Site Key</label>
+                    </th>
+                    <td>
+                        <input type="text" id="rmgc_recaptcha_site_key" name="rmgc_recaptcha_site_key" value="<?php echo esc_attr(get_option('rmgc_recaptcha_site_key')); ?>" class="regular-text">
+                        <p class="description">Google ReCAPTCHA v2 site key</p>
+                    </td>
+                </tr>
+                
+                <tr>
+                    <th scope="row">
+                        <label for="rmgc_recaptcha_secret_key">ReCAPTCHA Secret Key</label>
+                    </th>
+                    <td>
+                        <input type="password" id="rmgc_recaptcha_secret_key" name="rmgc_recaptcha_secret_key" value="<?php echo esc_attr(get_option('rmgc_recaptcha_secret_key')); ?>" class="regular-text">
+                        <p class="description">Google ReCAPTCHA v2 secret key</p>
                     </td>
                 </tr>
             </table>
@@ -89,9 +125,6 @@ function rmgc_settings_page() {
                 <input type="submit" name="rmgc_save_settings" class="button-primary" value="Save Settings">
             </p>
         </form>
-        
-        <h3>Shortcode</h3>
-        <p>Use this shortcode to display the booking form: <code>[rmgc_booking_form]</code></p>
     </div>
     <?php
 }
