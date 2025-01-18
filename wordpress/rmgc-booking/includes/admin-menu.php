@@ -1,13 +1,22 @@
 <?php
-// Add admin menu
-function rmgc_add_admin_menu() {
+// Add menu pages
+function rmgc_booking_admin_menu() {
     add_menu_page(
         'RMGC Booking',
         'RMGC Booking',
         'manage_options',
         'rmgc-booking',
-        'rmgc_bookings_page',
+        'rmgc_booking_requests_page',
         'dashicons-calendar-alt'
+    );
+    
+    add_submenu_page(
+        'rmgc-booking',
+        'Booking Requests',
+        'Booking Requests',
+        'manage_options',
+        'rmgc-booking',
+        'rmgc_booking_requests_page'
     );
     
     add_submenu_page(
@@ -16,59 +25,30 @@ function rmgc_add_admin_menu() {
         'Settings',
         'manage_options',
         'rmgc-booking-settings',
-        'rmgc_settings_page'
+        'rmgc_booking_settings_page'
     );
 }
-add_action('admin_menu', 'rmgc_add_admin_menu');
+add_action('admin_menu', 'rmgc_booking_admin_menu');
 
-// Bookings page
-function rmgc_bookings_page() {
-    global $wpdb;
-    $table_name = $wpdb->prefix . 'rmgc_bookings';
+// Booking requests page
+function rmgc_booking_requests_page() {
+    // Fetch bookings from API
+    $api_url = get_option('rmgc_api_url');
+    $api_key = get_option('rmgc_api_key');
     
-    // Handle status updates
-    if (isset($_POST['booking_id']) && isset($_POST['status'])) {
-        $wpdb->update(
-            $table_name,
-            array('status' => sanitize_text_field($_POST['status'])),
-            array('id' => intval($_POST['booking_id']))
-        );
-        
-        // Send email notification if status changed to approved
-        if ($_POST['status'] === 'approved') {
-            $booking = $wpdb->get_row($wpdb->prepare(
-                "SELECT * FROM $table_name WHERE id = %d",
-                intval($_POST['booking_id'])
-            ));
-            
-            if ($booking) {
-                $to = $booking->email;
-                $subject = 'Royal Melbourne Golf Club - Booking Approved';
-                $message = "Your booking request has been approved:\n\n";
-                $message .= "Date: " . $booking->booking_date . "\n";
-                $message .= "Players: " . $booking->players . "\n";
-                $message .= "\nThank you for choosing Royal Melbourne Golf Club.\n";
-                $message .= "If you need to make any changes, please contact us directly.";
-                
-                wp_mail($to, $subject, $message);
-            }
-        }
-    }
-    
-    // Get bookings with pagination
-    $page = isset($_GET['paged']) ? max(1, intval($_GET['paged'])) : 1;
-    $items_per_page = 20;
-    $offset = ($page - 1) * $items_per_page;
-    
-    $bookings = $wpdb->get_results($wpdb->prepare(
-        "SELECT * FROM $table_name ORDER BY created_at DESC LIMIT %d OFFSET %d",
-        $items_per_page,
-        $offset
+    $response = wp_remote_get($api_url . '/api/bookings', array(
+        'headers' => array(
+            'X-API-Key' => $api_key,
+            'X-WP-Site' => get_site_url()
+        )
     ));
     
-    $total_items = $wpdb->get_var("SELECT COUNT(*) FROM $table_name");
-    $total_pages = ceil($total_items / $items_per_page);
+    if (is_wp_error($response)) {
+        echo '<div class="error"><p>Error fetching booking requests: ' . esc_html($response->get_error_message()) . '</p></div>';
+        return;
+    }
     
+    $bookings = json_decode(wp_remote_retrieve_body($response), true);
     ?>
     <div class="wrap">
         <h1>Booking Requests</h1>
@@ -77,60 +57,97 @@ function rmgc_bookings_page() {
             <thead>
                 <tr>
                     <th>Date</th>
-                    <th>Players</th>
-                    <th>Handicap</th>
+                    <th>Name</th>
                     <th>Email</th>
+                    <th>Players</th>
+                    <th>Time Preferences</th>
+                    <th>Handicap</th>
+                    <th>Club</th>
                     <th>Status</th>
-                    <th>Created</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
-                <?php if (empty($bookings)): ?>
-                    <tr>
-                        <td colspan="7">No booking requests found.</td>
-                    </tr>
-                <?php else: ?>
-                    <?php foreach ($bookings as $booking): ?>
+                <?php if (!empty($bookings)) : ?>
+                    <?php foreach ($bookings as $booking) : ?>
                         <tr>
-                            <td><?php echo esc_html($booking->booking_date); ?></td>
-                            <td><?php echo esc_html($booking->players); ?></td>
-                            <td><?php echo esc_html($booking->handicap); ?></td>
-                            <td><?php echo esc_html($booking->email); ?></td>
-                            <td><?php echo esc_html($booking->status); ?></td>
-                            <td><?php echo esc_html($booking->created_at); ?></td>
+                            <td><?php echo esc_html(date('d/m/Y', strtotime($booking['date']))); ?></td>
+                            <td><?php echo esc_html($booking['firstName'] . ' ' . $booking['lastName']); ?></td>
+                            <td><?php echo esc_html($booking['email']); ?></td>
+                            <td><?php echo esc_html($booking['players']); ?></td>
+                            <td><?php echo esc_html(implode(', ', array_map(function($pref) {
+                                return ucwords(str_replace('_', ' ', $pref));
+                            }, $booking['timePreferences']))); ?></td>
+                            <td><?php echo esc_html($booking['handicap']); ?></td>
+                            <td><?php echo esc_html($booking['clubName']); ?></td>
+                            <td><?php echo esc_html(ucfirst($booking['status'] ?? 'Pending')); ?></td>
                             <td>
-                                <form method="post" style="display:inline;">
-                                    <input type="hidden" name="booking_id" value="<?php echo esc_attr($booking->id); ?>">
-                                    <select name="status" onchange="this.form.submit()" style="width: 100px;">
-                                        <option value="pending" <?php selected($booking->status, 'pending'); ?>>Pending</option>
-                                        <option value="approved" <?php selected($booking->status, 'approved'); ?>>Approved</option>
-                                        <option value="rejected" <?php selected($booking->status, 'rejected'); ?>>Rejected</option>
-                                    </select>
-                                </form>
+                                <button class="button approve-booking" data-id="<?php echo esc_attr($booking['id']); ?>">Approve</button>
+                                <button class="button reject-booking" data-id="<?php echo esc_attr($booking['id']); ?>">Reject</button>
                             </td>
                         </tr>
                     <?php endforeach; ?>
+                <?php else : ?>
+                    <tr>
+                        <td colspan="9">No booking requests found.</td>
+                    </tr>
                 <?php endif; ?>
             </tbody>
         </table>
-        
-        <?php if ($total_pages > 1): ?>
-            <div class="tablenav bottom">
-                <div class="tablenav-pages">
-                    <?php
-                    echo paginate_links(array(
-                        'base' => add_query_arg('paged', '%#%'),
-                        'format' => '',
-                        'prev_text' => '&laquo;',
-                        'next_text' => '&raquo;',
-                        'total' => $total_pages,
-                        'current' => $page,
-                    ));
-                    ?>
-                </div>
-            </div>
-        <?php endif; ?>
     </div>
+
+    <script>
+    jQuery(document).ready(function($) {
+        $('.approve-booking, .reject-booking').on('click', function() {
+            const bookingId = $(this).data('id');
+            const action = $(this).hasClass('approve-booking') ? 'approve' : 'reject';
+            
+            $.ajax({
+                url: ajaxurl,
+                method: 'POST',
+                data: {
+                    action: 'update_booking_status',
+                    booking_id: bookingId,
+                    status: action
+                },
+                success: function(response) {
+                    if (response.success) {
+                        location.reload();
+                    } else {
+                        alert('Error updating booking status');
+                    }
+                }
+            });
+        });
+    });
+    </script>
     <?php
 }
+
+// AJAX handler for updating booking status
+function rmgc_update_booking_status() {
+    $booking_id = $_POST['booking_id'];
+    $status = $_POST['status'];
+    
+    $api_url = get_option('rmgc_api_url');
+    $api_key = get_option('rmgc_api_key');
+    
+    $response = wp_remote_post($api_url . '/api/bookings/' . $booking_id . '/status', array(
+        'headers' => array(
+            'X-API-Key' => $api_key,
+            'X-WP-Site' => get_site_url(),
+            'Content-Type' => 'application/json'
+        ),
+        'body' => json_encode(array(
+            'status' => $status
+        ))
+    ));
+    
+    if (is_wp_error($response)) {
+        wp_send_json_error();
+        return;
+    }
+    
+    wp_send_json_success();
+}
+add_action('wp_ajax_update_booking_status', 'rmgc_update_booking_status');
