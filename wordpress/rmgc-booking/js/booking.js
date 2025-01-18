@@ -1,69 +1,37 @@
 jQuery(document).ready(function($) {
-    // Initialize main date picker
-    $('#embedded-calendar').datepicker({
+    // Initialize both date pickers
+    const dateOptions = {
         dateFormat: 'yy-mm-dd',
         minDate: 0,
-        numberOfMonths: [2, 1],
         beforeShowDay: function(date) {
             var day = date.getDay();
             // Enable only Monday (1), Tuesday (2), and Friday (5)
             return [(day === 1 || day === 2 || day === 5)];
-        },
+        }
+    };
+
+    // Initialize start date picker
+    $('#embedded-calendar').datepicker({
+        ...dateOptions,
         onSelect: function(dateText) {
             $('#bookingDate').val(dateText);
-            // When start date is selected, set minimum date for end date picker
+            // Set the minimum date for the end date picker
             $('#embedded-calendar-end').datepicker('option', 'minDate', dateText);
-            validateDateRange();
         }
     });
 
     // Initialize end date picker
     $('#embedded-calendar-end').datepicker({
-        dateFormat: 'yy-mm-dd',
-        minDate: 0,
-        numberOfMonths: [2, 1],
-        beforeShowDay: function(date) {
-            var day = date.getDay();
-            // Enable only Monday (1), Tuesday (2), and Friday (5)
-            return [(day === 1 || day === 2 || day === 5)];
-        },
+        ...dateOptions,
         onSelect: function(dateText) {
             $('#lastDate').val(dateText);
-            validateDateRange();
         }
     });
 
-    // Validate date range
-    function validateDateRange() {
-        const startDate = $('#bookingDate').val();
-        const endDate = $('#lastDate').val();
-        
-        if (startDate && endDate) {
-            const start = new Date(startDate);
-            const end = new Date(endDate);
-            
-            if (end < start) {
-                $('#rmgc-booking-message')
-                    .removeClass('success')
-                    .addClass('error')
-                    .html('Last available date must be after first available date');
-                return false;
-            }
-        }
-        
-        $('#rmgc-booking-message').html('');
-        return true;
-    }
-
-    // Handle form submission
+    // Form submission handler
     $('#rmgc-booking').on('submit', function(e) {
         e.preventDefault();
         
-        // Verify date range
-        if (!validateDateRange()) {
-            return;
-        }
-
         // Verify reCAPTCHA
         var recaptchaResponse = grecaptcha.getResponse();
         if (!recaptchaResponse) {
@@ -74,21 +42,21 @@ jQuery(document).ready(function($) {
             return;
         }
 
-        // Collect form data
+        // Gather all form data
         const bookingData = {
+            date: $('#bookingDate').val(),
+            lastDate: $('#lastDate').val(),
+            players: $('#players').val(),
+            handicap: $('#handicap').val(),
+            email: $('#email').val(),
             firstName: $('#firstName').val(),
             lastName: $('#lastName').val(),
-            email: $('#email').val(),
             phone: $('#phone').val(),
             state: $('#state').val(),
             country: $('#country').val(),
             clubName: $('#clubName').val(),
-            handicap: $('#handicap').val(),
             clubState: $('#clubState').val(),
             clubCountry: $('#clubCountry').val(),
-            date: $('#bookingDate').val(),
-            lastDate: $('#lastDate').val(),
-            players: $('#players').val(),
             recaptchaResponse: recaptchaResponse
         };
 
@@ -97,8 +65,8 @@ jQuery(document).ready(function($) {
 
         // Show loading state
         const submitButton = $(this).find('button[type="submit"]');
-        const originalButtonText = submitButton.html();
-        submitButton.html('Sending...').prop('disabled', true);
+        const originalButtonText = submitButton.text();
+        submitButton.prop('disabled', true).text('Submitting...');
 
         // Send to API
         $.ajax({
@@ -114,38 +82,38 @@ jQuery(document).ready(function($) {
                 $('#rmgc-booking-message')
                     .removeClass('error')
                     .addClass('success')
-                    .html('Booking request submitted successfully! We will contact you shortly.');
+                    .html('Your booking request has been submitted successfully. We will contact you shortly.');
                 
                 // Clear form and reset reCAPTCHA
                 $('#rmgc-booking')[0].reset();
-                $('#bookingDate, #lastDate').val('');
                 grecaptcha.reset();
                 
-                // Scroll to message
-                $('html, body').animate({
-                    scrollTop: $('#rmgc-booking-message').offset().top - 100
-                }, 500);
+                // Reset calendars
+                $('#bookingDate, #lastDate').val('');
             },
             error: function(xhr) {
                 console.error('Booking error:', xhr);
-                const error = xhr.responseJSON ? xhr.responseJSON.error : 'An error occurred';
+                const error = xhr.responseJSON ? xhr.responseJSON.error : 'An error occurred processing your request. Please try again.';
                 $('#rmgc-booking-message')
                     .removeClass('success')
                     .addClass('error')
                     .html('Error: ' + error);
-                
-                // Scroll to error message
-                $('html, body').animate({
-                    scrollTop: $('#rmgc-booking-message').offset().top - 100
-                }, 500);
                 
                 // Reset reCAPTCHA
                 grecaptcha.reset();
             },
             complete: function() {
                 // Reset button state
-                submitButton.html(originalButtonText).prop('disabled', false);
+                submitButton.prop('disabled', false).text(originalButtonText);
             }
         });
+    });
+
+    // Optional: Add validation for handicap field
+    $('#handicap').on('input', function() {
+        const value = parseInt($(this).val());
+        if (value > 24) {
+            $(this).val(24);
+        }
     });
 });
