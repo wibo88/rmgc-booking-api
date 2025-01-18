@@ -9,4 +9,11 @@ function rmgc_enqueue_scripts() {
     wp_enqueue_script('google-recaptcha', 'https://www.google.com/recaptcha/api.js');
     
     wp_enqueue_script('rmgc-booking', plugin_dir_url(dirname(__FILE__)) . 'js/booking.js', array('jquery', 'jquery-ui-datepicker'), time(), true);
+    
+    // Add AJAX URL and nonce for our local endpoints
+    wp_localize_script('rmgc-booking', 'rmgcAjax', array(
+        'ajaxurl' => admin_url('admin-ajax.php'),
+        'nonce' => wp_create_nonce('rmgc_booking_nonce')
+    ));
 }
+add_action('wp_enqueue_scripts', 'rmgc_enqueue_scripts');
