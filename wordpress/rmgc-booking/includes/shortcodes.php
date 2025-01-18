@@ -72,17 +72,10 @@ function rmgc_booking_form_shortcode() {
                 
                 <div class="form-row">
                     <div class="form-group half">
-                        <label for="bookingDate">First Available Date</label>
+                        <label for="bookingDate">Preferred Date</label>
                         <div id="embedded-calendar"></div>
                         <input type="hidden" id="bookingDate" name="date" required>
                     </div>
-                    <div class="form-group half">
-                        <label for="lastDate">Last Available Date</label>
-                        <div id="embedded-calendar-end"></div>
-                        <input type="hidden" id="lastDate" name="lastDate" required>
-                    </div>
-                </div>
-                <div class="form-row">
                     <div class="form-group half">
                         <label for="players">Number of Players</label>
                         <select id="players" name="players" required>
@@ -92,11 +85,33 @@ function rmgc_booking_form_shortcode() {
                             <option value="3">3 Players</option>
                             <option value="4">4 Players</option>
                         </select>
+
+                        <div class="time-preferences">
+                            <label>Time of Day Preference</label>
+                            <div class="checkbox-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="timePreference[]" value="early_morning">
+                                    Early Morning
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="timePreference[]" value="morning">
+                                    Morning
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="timePreference[]" value="afternoon">
+                                    Afternoon
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="timePreference[]" value="late_afternoon">
+                                    Late Afternoon
+                                </label>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div class="g-recaptcha" data-sitekey="<?php echo esc_attr(get_option('rmgc_recaptcha_site_key')); ?>"></div>
+            <div class="g-recaptcha" data-sitekey="<?php echo esc_attr(get_option('rmgc_recaptcha_site_key')); ?>" data-size="compact" data-theme="light"></div>
             
             <button type="submit" class="submit-button">Submit Booking Request</button>
         </form>
@@ -159,6 +174,22 @@ function rmgc_booking_form_shortcode() {
             margin-top: 5px;
             font-size: 0.85em;
         }
+        .time-preferences {
+            margin-top: 20px;
+        }
+        .checkbox-group {
+            margin-top: 10px;
+        }
+        .checkbox-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: normal;
+            color: #333;
+        }
+        .checkbox-label input[type="checkbox"] {
+            margin-right: 8px;
+            width: auto;
+        }
         .section-desc {
             display: block;
             margin-bottom: 20px;
@@ -200,8 +231,7 @@ function rmgc_booking_form_shortcode() {
             display: flex;
             justify-content: center;
         }
-        #embedded-calendar,
-        #embedded-calendar-end {
+        #embedded-calendar {
             width: 100%;
             margin-bottom: 15px;
         }
