@@ -32,23 +32,8 @@ add_action('admin_menu', 'rmgc_booking_admin_menu');
 
 // Booking requests page
 function rmgc_booking_requests_page() {
-    // Fetch bookings from API
-    $api_url = get_option('rmgc_api_url');
-    $api_key = get_option('rmgc_api_key');
-    
-    $response = wp_remote_get($api_url . '/api/bookings', array(
-        'headers' => array(
-            'X-API-Key' => $api_key,
-            'X-WP-Site' => get_site_url()
-        )
-    ));
-    
-    if (is_wp_error($response)) {
-        echo '<div class="error"><p>Error fetching booking requests: ' . esc_html($response->get_error_message()) . '</p></div>';
-        return;
-    }
-    
-    $bookings = json_decode(wp_remote_retrieve_body($response), true);
+    // Get bookings from database
+    $bookings = rmgc_get_bookings();
     ?>
     <div class="wrap">
         <h1>Booking Requests</h1>
@@ -80,7 +65,7 @@ function rmgc_booking_requests_page() {
                             }, $booking['timePreferences']))); ?></td>
                             <td><?php echo esc_html($booking['handicap']); ?></td>
                             <td><?php echo esc_html($booking['clubName']); ?></td>
-                            <td><?php echo esc_html(ucfirst($booking['status'] ?? 'Pending')); ?></td>
+                            <td><?php echo esc_html(ucfirst($booking['status'])); ?></td>
                             <td>
                                 <button class="button approve-booking" data-id="<?php echo esc_attr($booking['id']); ?>">Approve</button>
                                 <button class="button reject-booking" data-id="<?php echo esc_attr($booking['id']); ?>">Reject</button>
@@ -106,9 +91,10 @@ function rmgc_booking_requests_page() {
                 url: ajaxurl,
                 method: 'POST',
                 data: {
-                    action: 'update_booking_status',
+                    action: 'rmgc_update_booking_status',
                     booking_id: bookingId,
-                    status: action
+                    status: action,
+                    nonce: rmgcAjax.nonce
                 },
                 success: function(response) {
                     if (response.success) {
@@ -124,30 +110,29 @@ function rmgc_booking_requests_page() {
     <?php
 }
 
-// AJAX handler for updating booking status
-function rmgc_update_booking_status() {
-    $booking_id = $_POST['booking_id'];
-    $status = $_POST['status'];
-    
-    $api_url = get_option('rmgc_api_url');
-    $api_key = get_option('rmgc_api_key');
-    
-    $response = wp_remote_post($api_url . '/api/bookings/' . $booking_id . '/status', array(
-        'headers' => array(
-            'X-API-Key' => $api_key,
-            'X-WP-Site' => get_site_url(),
-            'Content-Type' => 'application/json'
-        ),
-        'body' => json_encode(array(
-            'status' => $status
-        ))
-    ));
-    
-    if (is_wp_error($response)) {
-        wp_send_json_error();
+// Register AJAX handler
+add_action('wp_ajax_rmgc_update_booking_status', 'rmgc_handle_booking_status_update');
+
+function rmgc_handle_booking_status_update() {
+    // Verify nonce and permissions
+    if (!check_ajax_referer('rmgc_booking_nonce', 'nonce', false) || !current_user_can('manage_options')) {
+        wp_send_json_error('Unauthorized');
         return;
     }
     
-    wp_send_json_success();
+    $booking_id = isset($_POST['booking_id']) ? intval($_POST['booking_id']) : 0;
+    $status = isset($_POST['status']) ? sanitize_text_field($_POST['status']) : '';
+    
+    if (!$booking_id || !in_array($status, array('approve', 'reject'))) {
+        wp_send_json_error('Invalid parameters');
+        return;
+    }
+    
+    $result = rmgc_update_booking_status($booking_id, $status);
+    
+    if ($result) {
+        wp_send_json_success();
+    } else {
+        wp_send_json_error('Failed to update status');
+    }
 }
-add_action('wp_ajax_update_booking_status', 'rmgc_update_booking_status');
