@@ -34,6 +34,15 @@ jQuery(document).ready(function($) {
             timePreferences.push($(this).val());
         });
 
+        // Validate time preferences
+        if (timePreferences.length === 0) {
+            $('#rmgc-booking-message')
+                .removeClass('success')
+                .addClass('error')
+                .html('Please select at least one time preference');
+            return;
+        }
+
         // Gather form data
         const bookingData = {
             date: $('#bookingDate').val(),
@@ -60,36 +69,44 @@ jQuery(document).ready(function($) {
         const originalButtonText = submitButton.text();
         submitButton.prop('disabled', true).text('Submitting...');
 
-        // Send to API
+        // Send to WordPress AJAX
         $.ajax({
-            url: rmgcApi.apiUrl + '/api/booking',
+            url: rmgcAjax.ajaxurl,
             method: 'POST',
-            headers: {
-                'X-API-Key': rmgcApi.apiKey,
-                'X-WP-Site': rmgcApi.siteUrl,
-                'Content-Type': 'application/json'
+            data: {
+                action: 'rmgc_create_booking',
+                nonce: rmgcAjax.nonce,
+                booking: JSON.stringify(bookingData)
             },
-            data: JSON.stringify(bookingData),
             success: function(response) {
-                $('#rmgc-booking-message')
-                    .removeClass('error')
-                    .addClass('success')
-                    .html('Your booking request has been submitted successfully. We will contact you shortly.');
-                
-                // Clear form and reset reCAPTCHA
-                $('#rmgc-booking')[0].reset();
-                grecaptcha.reset();
-                
-                // Reset calendar
-                $('#bookingDate').val('');
+                if (response.success) {
+                    $('#rmgc-booking-message')
+                        .removeClass('error')
+                        .addClass('success')
+                        .html('Your booking request has been submitted successfully. We will contact you shortly.');
+                    
+                    // Clear form and reset reCAPTCHA
+                    $('#rmgc-booking')[0].reset();
+                    grecaptcha.reset();
+                    
+                    // Reset calendar
+                    $('#bookingDate').val('');
+                } else {
+                    $('#rmgc-booking-message')
+                        .removeClass('success')
+                        .addClass('error')
+                        .html('Error: ' + (response.data || 'An error occurred processing your request. Please try again.'));
+                    
+                    // Reset reCAPTCHA
+                    grecaptcha.reset();
+                }
             },
             error: function(xhr) {
                 console.error('Booking error:', xhr);
-                const error = xhr.responseJSON ? xhr.responseJSON.error : 'An error occurred processing your request. Please try again.';
                 $('#rmgc-booking-message')
                     .removeClass('success')
                     .addClass('error')
-                    .html('Error: ' + error);
+                    .html('Error: An error occurred processing your request. Please try again.');
                 
                 // Reset reCAPTCHA
                 grecaptcha.reset();
