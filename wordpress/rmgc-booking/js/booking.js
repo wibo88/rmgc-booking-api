@@ -1,30 +1,16 @@
 jQuery(document).ready(function($) {
-    // Initialize both date pickers
-    const dateOptions = {
+    // Initialize date picker
+    $('#embedded-calendar').datepicker({
         dateFormat: 'yy-mm-dd',
         minDate: 0,
+        numberOfMonths: 1,
         beforeShowDay: function(date) {
             var day = date.getDay();
             // Enable only Monday (1), Tuesday (2), and Friday (5)
             return [(day === 1 || day === 2 || day === 5)];
-        }
-    };
-
-    // Initialize start date picker
-    $('#embedded-calendar').datepicker({
-        ...dateOptions,
+        },
         onSelect: function(dateText) {
             $('#bookingDate').val(dateText);
-            // Set the minimum date for the end date picker
-            $('#embedded-calendar-end').datepicker('option', 'minDate', dateText);
-        }
-    });
-
-    // Initialize end date picker
-    $('#embedded-calendar-end').datepicker({
-        ...dateOptions,
-        onSelect: function(dateText) {
-            $('#lastDate').val(dateText);
         }
     });
 
@@ -38,14 +24,19 @@ jQuery(document).ready(function($) {
             $('#rmgc-booking-message')
                 .removeClass('success')
                 .addClass('error')
-                .html('Please complete the reCAPTCHA verification');
+                .html('Please confirm you are not a robot');
             return;
         }
 
-        // Gather all form data
+        // Get selected time preferences
+        const timePreferences = [];
+        $('input[name="timePreference[]"]:checked').each(function() {
+            timePreferences.push($(this).val());
+        });
+
+        // Gather form data
         const bookingData = {
             date: $('#bookingDate').val(),
-            lastDate: $('#lastDate').val(),
             players: $('#players').val(),
             handicap: $('#handicap').val(),
             email: $('#email').val(),
@@ -57,6 +48,7 @@ jQuery(document).ready(function($) {
             clubName: $('#clubName').val(),
             clubState: $('#clubState').val(),
             clubCountry: $('#clubCountry').val(),
+            timePreferences: timePreferences,
             recaptchaResponse: recaptchaResponse
         };
 
@@ -88,8 +80,8 @@ jQuery(document).ready(function($) {
                 $('#rmgc-booking')[0].reset();
                 grecaptcha.reset();
                 
-                // Reset calendars
-                $('#bookingDate, #lastDate').val('');
+                // Reset calendar
+                $('#bookingDate').val('');
             },
             error: function(xhr) {
                 console.error('Booking error:', xhr);
