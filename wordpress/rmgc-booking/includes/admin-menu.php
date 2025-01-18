@@ -30,6 +30,85 @@ function rmgc_booking_admin_menu() {
 }
 add_action('admin_menu', 'rmgc_booking_admin_menu');
 
+// Settings page
+function rmgc_booking_settings_page() {
+    if (!current_user_can('manage_options')) {
+        return;
+    }
+
+    $api_url = get_option('rmgc_api_url', 'http://localhost:3000');
+    $api_key = get_option('rmgc_api_key', '');
+    $recaptcha_site_key = get_option('rmgc_recaptcha_site_key', '');
+    $recaptcha_secret_key = get_option('rmgc_recaptcha_secret_key', '');
+
+    if (isset($_POST['rmgc_save_settings'])) {
+        if (!isset($_POST['rmgc_settings_nonce']) || !wp_verify_nonce($_POST['rmgc_settings_nonce'], 'rmgc_save_settings')) {
+            wp_die('Invalid nonce');
+        }
+
+        update_option('rmgc_api_url', sanitize_text_field($_POST['rmgc_api_url']));
+        update_option('rmgc_api_key', sanitize_text_field($_POST['rmgc_api_key']));
+        update_option('rmgc_recaptcha_site_key', sanitize_text_field($_POST['rmgc_recaptcha_site_key']));
+        update_option('rmgc_recaptcha_secret_key', sanitize_text_field($_POST['rmgc_recaptcha_secret_key']));
+
+        echo '<div class="notice notice-success"><p>Settings saved successfully!</p></div>';
+    }
+    ?>
+    <div class="wrap">
+        <h1>RMGC Booking Settings</h1>
+        <form method="post" action="">
+            <?php wp_nonce_field('rmgc_save_settings', 'rmgc_settings_nonce'); ?>
+            
+            <table class="form-table">
+                <tr>
+                    <th scope="row">
+                        <label for="rmgc_api_url">API URL</label>
+                    </th>
+                    <td>
+                        <input type="text" id="rmgc_api_url" name="rmgc_api_url" value="<?php echo esc_attr($api_url); ?>" class="regular-text">
+                        <p class="description">The URL of your booking API endpoint (e.g., http://localhost:3000)</p>
+                    </td>
+                </tr>
+                
+                <tr>
+                    <th scope="row">
+                        <label for="rmgc_api_key">API Key</label>
+                    </th>
+                    <td>
+                        <input type="password" id="rmgc_api_key" name="rmgc_api_key" value="<?php echo esc_attr($api_key); ?>" class="regular-text">
+                        <p class="description">Your API authentication key</p>
+                    </td>
+                </tr>
+                
+                <tr>
+                    <th scope="row">
+                        <label for="rmgc_recaptcha_site_key">ReCAPTCHA Site Key</label>
+                    </th>
+                    <td>
+                        <input type="text" id="rmgc_recaptcha_site_key" name="rmgc_recaptcha_site_key" value="<?php echo esc_attr($recaptcha_site_key); ?>" class="regular-text">
+                        <p class="description">Google ReCAPTCHA v2 site key</p>
+                    </td>
+                </tr>
+                
+                <tr>
+                    <th scope="row">
+                        <label for="rmgc_recaptcha_secret_key">ReCAPTCHA Secret Key</label>
+                    </th>
+                    <td>
+                        <input type="password" id="rmgc_recaptcha_secret_key" name="rmgc_recaptcha_secret_key" value="<?php echo esc_attr($recaptcha_secret_key); ?>" class="regular-text">
+                        <p class="description">Google ReCAPTCHA v2 secret key</p>
+                    </td>
+                </tr>
+            </table>
+            
+            <p class="submit">
+                <input type="submit" name="rmgc_save_settings" class="button-primary" value="Save Settings">
+            </p>
+        </form>
+    </div>
+    <?php
+}
+
 // Booking requests page
 function rmgc_booking_requests_page() {
     // Fetch bookings from API
