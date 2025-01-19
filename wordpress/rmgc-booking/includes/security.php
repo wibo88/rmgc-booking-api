@@ -14,8 +14,8 @@ function rmgc_check_rate_limit($email) {
     $transient_key = 'rmgc_rate_limit_' . md5($email);
     $attempt_count = get_transient($transient_key);
     
-    // Allow 3 attempts per hour
-    if ($attempt_count && $attempt_count >= 3) {
+    // Allow 10 attempts per hour
+    if ($attempt_count && $attempt_count >= 10) {
         return new WP_Error(
             'rate_limit_exceeded',
             'Too many booking attempts. Please try again later.'
@@ -30,6 +30,14 @@ function rmgc_check_rate_limit($email) {
     }
     
     return true;
+}
+
+/**
+ * Clear rate limit for testing
+ */
+function rmgc_clear_rate_limit($email) {
+    $transient_key = 'rmgc_rate_limit_' . md5($email);
+    delete_transient($transient_key);
 }
 
 /**
@@ -92,11 +100,15 @@ function rmgc_validate_booking_data($booking_data) {
     }
     
     // Date validation
-    $booking_date = new DateTime($booking_data['date']);
-    $day_of_week = $booking_date->format('N'); // 1 (Mon) through 7 (Sun)
-    
-    if (!in_array($day_of_week, array(1, 2, 5))) { // Monday, Tuesday, Friday
-        $errors->add('invalid_date', 'Bookings are only available on Monday, Tuesday, and Friday');
+    try {
+        $booking_date = new DateTime($booking_data['date']);
+        $day_of_week = $booking_date->format('N'); // 1 (Mon) through 7 (Sun)
+        
+        if (!in_array($day_of_week, array(1, 2, 5))) { // Monday, Tuesday, Friday
+            $errors->add('invalid_date', 'Bookings are only available on Monday, Tuesday, and Friday');
+        }
+    } catch (Exception $e) {
+        $errors->add('invalid_date', 'Invalid date format');
     }
     
     return $errors->has_errors() ? $errors : true;
@@ -108,11 +120,8 @@ function rmgc_validate_booking_data($booking_data) {
 function rmgc_log_error($error_message, $context = array()) {
     $log_dir = WP_CONTENT_DIR . '/rmgc-logs';
     
-    // Create logs directory if it doesn't exist
     if (!file_exists($log_dir)) {
         wp_mkdir_p($log_dir);
-        
-        // Create .htaccess to prevent direct access
         file_put_contents($log_dir . '/.htaccess', 'deny from all');
     }
     
@@ -136,7 +145,6 @@ function rmgc_add_security_headers() {
     header('X-Content-Type-Options: nosniff');
     header('Referrer-Policy: strict-origin-when-cross-origin');
     
-    // Only add HSTS if SSL is detected
     if (is_ssl()) {
         header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
     }
