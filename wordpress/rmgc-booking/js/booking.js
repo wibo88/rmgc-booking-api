@@ -1,6 +1,6 @@
 jQuery(document).ready(function($) {
-    // Initialize date picker
-    $('#embedded-calendar').datepicker({
+    // Initialize date picker with custom navigation
+    var calendar = $('#embedded-calendar').datepicker({
         dateFormat: 'yy-mm-dd',
         minDate: 0,
         numberOfMonths: 1,
@@ -11,23 +11,45 @@ jQuery(document).ready(function($) {
         },
         onSelect: function(dateText) {
             $('#bookingDate').val(dateText);
+        },
+        onChangeMonthYear: function(year, month) {
+            updateHeaderDates(year, month);
         }
+    }).data('datepicker');
+
+    // Initial header update
+    var currentDate = new Date();
+    updateHeaderDates(currentDate.getFullYear(), currentDate.getMonth() + 1);
+
+    // Custom navigation handlers
+    $('#custom-prev').click(function() {
+        var current = $('#embedded-calendar').datepicker('getDate');
+        current.setMonth(current.getMonth() - 1);
+        $('#embedded-calendar').datepicker('setDate', current);
+        updateHeaderDates(current.getFullYear(), current.getMonth() + 1);
     });
+
+    $('#custom-next').click(function() {
+        var current = $('#embedded-calendar').datepicker('getDate');
+        current.setMonth(current.getMonth() + 1);
+        $('#embedded-calendar').datepicker('setDate', current);
+        updateHeaderDates(current.getFullYear(), current.getMonth() + 1);
+    });
+
+    function updateHeaderDates(year, month) {
+        var monthNames = [
+            "January", "February", "March", "April",
+            "May", "June", "July", "August",
+            "September", "October", "November", "December"
+        ];
+        $('#custom-month').text(monthNames[month - 1]);
+        $('#custom-year').text(year);
+    }
 
     // Form submission handler
     $('#rmgc-booking').on('submit', function(e) {
         e.preventDefault();
         
-        // Verify reCAPTCHA
-        var recaptchaResponse = grecaptcha.getResponse();
-        if (!recaptchaResponse) {
-            $('#rmgc-booking-message')
-                .removeClass('success')
-                .addClass('error')
-                .html('Please confirm you are not a robot');
-            return;
-        }
-
         // Get selected time preferences
         const timePreferences = [];
         $('input[name="timePreference[]"]:checked').each(function() {
@@ -40,6 +62,16 @@ jQuery(document).ready(function($) {
                 .removeClass('success')
                 .addClass('error')
                 .html('Please select at least one time preference');
+            return;
+        }
+
+        // Verify reCAPTCHA
+        var recaptchaResponse = grecaptcha.getResponse();
+        if (!recaptchaResponse) {
+            $('#rmgc-booking-message')
+                .removeClass('success')
+                .addClass('error')
+                .html('Please confirm you are not a robot');
             return;
         }
 
