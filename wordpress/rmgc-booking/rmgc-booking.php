@@ -22,8 +22,85 @@ define('RMGC_BOOKING_URL', plugin_dir_url(__FILE__));
 define('RMGC_BOOKING_MIN_WP_VERSION', '5.8');
 define('RMGC_BOOKING_MIN_PHP_VERSION', '7.4');
 
-// Include WordPress core files needed for database operations
-require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+// Include required files
+require_once RMGC_BOOKING_PATH . 'includes/database.php';
+
+// Register activation function
+function rmgc_activate_plugin() {
+    global $wpdb;
+    
+    // Create required tables
+    $charset_collate = $wpdb->get_charset_collate();
+    
+    // Create bookings table
+    $table_name = $wpdb->prefix . 'rmgc_bookings';
+    $sql = "CREATE TABLE IF NOT EXISTS $table_name (
+        id bigint(20) NOT NULL AUTO_INCREMENT,
+        date date NOT NULL,
+        first_name varchar(100) NOT NULL,
+        last_name varchar(100) NOT NULL,
+        email varchar(100) NOT NULL,
+        phone varchar(50),
+        state varchar(100),
+        country varchar(100),
+        club_name varchar(100),
+        club_state varchar(100),
+        club_country varchar(100),
+        handicap int(3) NOT NULL,
+        players int(1) NOT NULL,
+        time_preferences text NOT NULL,
+        status varchar(20) DEFAULT 'pending',
+        admin_notes text,
+        assigned_time time DEFAULT NULL,
+        last_modified datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        created_at datetime DEFAULT CURRENT_TIMESTAMP,
+        modified_by bigint(20) DEFAULT NULL,
+        PRIMARY KEY  (id),
+        KEY idx_status (status),
+        KEY idx_date (date),
+        KEY idx_email (email)
+    ) $charset_collate;";
+
+    // Create notes table
+    $notes_table = $wpdb->prefix . 'rmgc_booking_notes';
+    $sql .= "CREATE TABLE IF NOT EXISTS $notes_table (
+        id bigint(20) NOT NULL AUTO_INCREMENT,
+        booking_id bigint(20) NOT NULL,
+        note text NOT NULL,
+        created_at datetime DEFAULT CURRENT_TIMESTAMP,
+        created_by bigint(20) NOT NULL,
+        PRIMARY KEY  (id),
+        KEY booking_id (booking_id),
+        FOREIGN KEY (booking_id) REFERENCES $table_name(id) ON DELETE CASCADE
+    ) $charset_collate;";
+
+    require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+    dbDelta($sql);
+    
+    // Create logs directory
+    $log_dir = WP_CONTENT_DIR . '/rmgc-logs';
+    if (!file_exists($log_dir)) {
+        wp_mkdir_p($log_dir);
+        file_put_contents($log_dir . '/.htaccess', 'deny from all');
+    }
+    
+    // Set default options
+    if (!get_option('rmgc_admin_notification_emails')) {
+        update_option('rmgc_admin_notification_emails', get_option('admin_email'));
+    }
+
+    // Clear and reschedule tasks
+    wp_clear_scheduled_hook('rmgc_cleanup_old_logs');
+    if (!wp_next_scheduled('rmgc_cleanup_old_logs')) {
+        wp_schedule_event(time(), 'daily', 'rmgc_cleanup_old_logs');
+    }
+
+    // Update version
+    update_option('rmgc_version', RMGC_BOOKING_VERSION);
+}
+
+// Register activation hook
+register_activation_hook(__FILE__, 'rmgc_activate_plugin');
 
 // Version compatibility check
 function rmgc_version_check() {
@@ -50,53 +127,7 @@ function rmgc_version_check() {
     return true;
 }
 
-// Include database functions first
-require_once RMGC_BOOKING_PATH . 'includes/database.php';
-
-// Register activation hook before loading other files
-register_activation_hook(__FILE__, 'rmgc_activate_plugin');
-
-function rmgc_activate_plugin() {
-    try {
-        // Version update check
-        $current_version = get_option('rmgc_version', '1.0.0');
-        if (version_compare($current_version, RMGC_BOOKING_VERSION, '<')) {
-            // Perform any necessary upgrade routines here
-            update_option('rmgc_version', RMGC_BOOKING_VERSION);
-        }
-
-        // Create database tables
-        if (!function_exists('rmgc_create_bookings_table')) {
-            require_once RMGC_BOOKING_PATH . 'includes/database.php';
-        }
-        rmgc_create_bookings_table();
-        
-        // Create logs directory
-        $log_dir = WP_CONTENT_DIR . '/rmgc-logs';
-        if (!file_exists($log_dir)) {
-            wp_mkdir_p($log_dir);
-            // Create .htaccess to prevent direct access
-            file_put_contents($log_dir . '/.htaccess', 'deny from all');
-        }
-        
-        // Set default options if not already set
-        if (!get_option('rmgc_admin_notification_emails')) {
-            update_option('rmgc_admin_notification_emails', get_option('admin_email'));
-        }
-
-        // Clear any existing scheduled tasks
-        wp_clear_scheduled_hook('rmgc_cleanup_old_logs');
-        // Schedule new tasks
-        if (!wp_next_scheduled('rmgc_cleanup_old_logs')) {
-            wp_schedule_event(time(), 'daily', 'rmgc_cleanup_old_logs');
-        }
-    } catch (Exception $e) {
-        error_log('RMGC Booking activation error: ' . $e->getMessage());
-        wp_die('Error activating RMGC Booking plugin. Please check the error log for details.');
-    }
-}
-
-// Only load the rest of the plugin if version requirements are met
+// Only load the plugin if version requirements are met
 if (rmgc_version_check()) {
     // Include remaining required files
     require_once RMGC_BOOKING_PATH . 'includes/init.php';
