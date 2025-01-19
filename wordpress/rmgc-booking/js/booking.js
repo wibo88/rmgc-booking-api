@@ -66,6 +66,8 @@ jQuery(document).ready(function($) {
 
         // Verify reCAPTCHA
         var recaptchaResponse = grecaptcha.getResponse();
+        console.log('reCAPTCHA response:', recaptchaResponse); // Debug log
+        
         if (!recaptchaResponse) {
             $('#rmgc-booking-message')
                 .removeClass('success')
@@ -92,6 +94,8 @@ jQuery(document).ready(function($) {
             recaptchaResponse: recaptchaResponse
         };
 
+        console.log('Submitting booking data:', bookingData); // Debug log
+
         // Clear previous messages
         $('#rmgc-booking-message').removeClass('error success').html('');
 
@@ -110,6 +114,7 @@ jQuery(document).ready(function($) {
                 booking: JSON.stringify(bookingData)
             },
             success: function(response) {
+                console.log('Server response:', response); // Debug log
                 if (response.success) {
                     $('#rmgc-booking-message')
                         .removeClass('error')
@@ -132,8 +137,8 @@ jQuery(document).ready(function($) {
                     grecaptcha.reset();
                 }
             },
-            error: function(xhr) {
-                console.error('Booking error:', xhr);
+            error: function(xhr, status, error) {
+                console.error('Ajax error:', {xhr: xhr, status: status, error: error}); // Debug log
                 $('#rmgc-booking-message')
                     .removeClass('success')
                     .addClass('error')
