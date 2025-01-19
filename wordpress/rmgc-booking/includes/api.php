@@ -49,9 +49,17 @@ function rmgc_api_create_booking() {
         if (is_wp_error($rate_limit_check)) {
             throw new Exception($rate_limit_check->get_error_message());
         }
+
+        // Extract recaptcha response from booking data
+        $recaptcha_response = isset($booking_data['recaptchaResponse']) ? $booking_data['recaptchaResponse'] : '';
+        unset($booking_data['recaptchaResponse']); // Remove from booking data before storage
         
         // Verify reCAPTCHA
-        $recaptcha_result = rmgc_verify_recaptcha($booking_data['recaptchaResponse']);
+        if (empty($recaptcha_response)) {
+            throw new Exception('Please complete the reCAPTCHA verification');
+        }
+        
+        $recaptcha_result = rmgc_verify_recaptcha($recaptcha_response);
         if (is_wp_error($recaptcha_result)) {
             throw new Exception($recaptcha_result->get_error_message());
         }
@@ -156,9 +164,12 @@ function rmgc_verify_recaptcha($recaptcha_response) {
     $body = wp_remote_retrieve_body($response);
     $result = json_decode($body, true);
     
-    if (!$result['success']) {
+    if (!isset($result['success']) || !$result['success']) {
         $error_codes = isset($result['error-codes']) ? implode(', ', $result['error-codes']) : '';
-        rmgc_log_error('reCAPTCHA validation failed', array('error_codes' => $error_codes));
+        rmgc_log_error('reCAPTCHA validation failed', array(
+            'error_codes' => $error_codes,
+            'response' => $result
+        ));
         return new WP_Error('recaptcha_failed', 'reCAPTCHA verification failed');
     }
     
