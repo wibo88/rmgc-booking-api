@@ -1,9 +1,4 @@
 jQuery(document).ready(function($) {
-    // Initialize date pickers
-    $('.date-picker').datepicker({
-        dateFormat: 'yy-mm-dd'
-    });
-    
     // Initialize dialogs
     $('#approval-dialog').dialog({
         autoOpen: false,
@@ -37,6 +32,9 @@ jQuery(document).ready(function($) {
         autoOpen: false,
         modal: true,
         width: 500,
+        open: function() {
+            $('#new-note').val(''); // Clear the new note field
+        },
         buttons: {
             "Add Note": function() {
                 handleAddNote();
@@ -49,12 +47,10 @@ jQuery(document).ready(function($) {
     
     // Handle approval button click
     $('.approve-booking').on('click', function() {
-        const id = $(this).data('id');
-        const timePrefs = $(this).data('time-prefs');
-        $('#booking-id').val(id);
-        $('#time-preferences').text(timePrefs.map(pref => 
-            pref.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())
-        ).join(', '));
+        const bookingId = $(this).data('id');
+        const timePrefs = $(this).closest('tr').find('.time-preferences').text().trim();
+        $('#booking-id').val(bookingId);
+        $('#time-preferences').text(timePrefs);
         $('#approval-dialog').dialog('open');
     });
     
@@ -70,14 +66,19 @@ jQuery(document).ready(function($) {
         $('#notes-booking-id').val(booking.id);
         
         // Display existing notes
-        const notesHtml = booking.notes.length ? booking.notes.map(note => `
-            <div class="note-item">
-                <div class="note-meta">
-                    By ${note.author} on ${new Date(note.date).toLocaleString()}
+        let notesHtml = '';
+        if (booking.notes && booking.notes.length) {
+            notesHtml = booking.notes.map(note => `
+                <div class="note-item">
+                    <div class="note-meta">
+                        By ${note.author} on ${new Date(note.date).toLocaleString()}
+                    </div>
+                    <div class="note-content">${note.note}</div>
                 </div>
-                <div class="note-content">${note.note}</div>
-            </div>
-        `).join('') : '<p>No notes yet</p>';
+            `).join('');
+        } else {
+            notesHtml = '<p>No notes yet</p>';
+        }
         
         $('#notes-history').html(notesHtml);
         $('#notes-dialog').dialog('open');
@@ -109,11 +110,13 @@ jQuery(document).ready(function($) {
                 if (response.success) {
                     location.reload();
                 } else {
-                    alert('Error updating booking status: ' + response.data);
+                    console.error('Server error:', response);
+                    alert('Error updating booking status: ' + (response.data || 'Unknown error'));
                 }
             },
-            error: function() {
-                alert('Server error occurred');
+            error: function(jqXHR, textStatus, errorThrown) {
+                console.error('AJAX error:', textStatus, errorThrown);
+                alert('Server error occurred: ' + textStatus);
             }
         });
     }
@@ -142,11 +145,13 @@ jQuery(document).ready(function($) {
                 if (response.success) {
                     location.reload();
                 } else {
-                    alert('Error updating booking status: ' + response.data);
+                    console.error('Server error:', response);
+                    alert('Error updating booking status: ' + (response.data || 'Unknown error'));
                 }
             },
-            error: function() {
-                alert('Server error occurred');
+            error: function(jqXHR, textStatus, errorThrown) {
+                console.error('AJAX error:', textStatus, errorThrown);
+                alert('Server error occurred: ' + textStatus);
             }
         });
     }
@@ -174,12 +179,24 @@ jQuery(document).ready(function($) {
                 if (response.success) {
                     location.reload();
                 } else {
-                    alert('Error adding note: ' + response.data);
+                    console.error('Server error:', response);
+                    alert('Error adding note: ' + (response.data || 'Unknown error'));
                 }
             },
-            error: function() {
-                alert('Server error occurred');
+            error: function(jqXHR, textStatus, errorThrown) {
+                console.error('AJAX error:', textStatus, errorThrown);
+                alert('Server error occurred: ' + textStatus);
             }
         });
     }
+
+    // Add better error logging
+    $(document).ajaxError(function(event, jqxhr, settings, thrownError) {
+        console.error('AJAX Error:', {
+            event: event,
+            jqxhr: jqxhr,
+            settings: settings,
+            thrownError: thrownError
+        });
+    });
 });
