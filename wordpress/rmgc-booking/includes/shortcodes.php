@@ -1,16 +1,12 @@
 <?php
-// [Previous content remains the same until the custom-header nav styles]
+// [Previous content remains the same until the rmgc-booking-message styles]
 
-        .custom-header nav span:before {
-            color: #fff;
-            position: absolute;
+        #rmgc-booking-message {
+            margin: 20px 0 40px 0; /* Added bottom margin */
+            padding: 15px;
+            border-radius: 4px;
             text-align: center;
-            width: 32px;
-            font-size: 24px;
-            line-height: 32px;
-            font-weight: bold;
-            left: 0; /* Center the arrow */
-            top: 0; /* Center the arrow */
+            min-height: 60px; /* Minimum height to ensure visibility */
         }
 
 // [Rest of the file remains the same]
