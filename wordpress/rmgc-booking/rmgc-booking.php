@@ -22,6 +22,9 @@ define('RMGC_BOOKING_URL', plugin_dir_url(__FILE__));
 define('RMGC_BOOKING_MIN_WP_VERSION', '5.8');
 define('RMGC_BOOKING_MIN_PHP_VERSION', '7.4');
 
+// Include WordPress core files needed for database operations
+require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+
 // Version compatibility check
 function rmgc_version_check() {
     global $wp_version;
@@ -54,34 +57,42 @@ require_once RMGC_BOOKING_PATH . 'includes/database.php';
 register_activation_hook(__FILE__, 'rmgc_activate_plugin');
 
 function rmgc_activate_plugin() {
-    // Version update check
-    $current_version = get_option('rmgc_version', '1.0.0');
-    if (version_compare($current_version, RMGC_BOOKING_VERSION, '<')) {
-        // Perform any necessary upgrade routines here
-        update_option('rmgc_version', RMGC_BOOKING_VERSION);
-    }
+    try {
+        // Version update check
+        $current_version = get_option('rmgc_version', '1.0.0');
+        if (version_compare($current_version, RMGC_BOOKING_VERSION, '<')) {
+            // Perform any necessary upgrade routines here
+            update_option('rmgc_version', RMGC_BOOKING_VERSION);
+        }
 
-    // Create database tables
-    rmgc_create_bookings_table();
-    
-    // Create logs directory
-    $log_dir = WP_CONTENT_DIR . '/rmgc-logs';
-    if (!file_exists($log_dir)) {
-        wp_mkdir_p($log_dir);
-        // Create .htaccess to prevent direct access
-        file_put_contents($log_dir . '/.htaccess', 'deny from all');
-    }
-    
-    // Set default options if not already set
-    if (!get_option('rmgc_admin_notification_emails')) {
-        update_option('rmgc_admin_notification_emails', get_option('admin_email'));
-    }
+        // Create database tables
+        if (!function_exists('rmgc_create_bookings_table')) {
+            require_once RMGC_BOOKING_PATH . 'includes/database.php';
+        }
+        rmgc_create_bookings_table();
+        
+        // Create logs directory
+        $log_dir = WP_CONTENT_DIR . '/rmgc-logs';
+        if (!file_exists($log_dir)) {
+            wp_mkdir_p($log_dir);
+            // Create .htaccess to prevent direct access
+            file_put_contents($log_dir . '/.htaccess', 'deny from all');
+        }
+        
+        // Set default options if not already set
+        if (!get_option('rmgc_admin_notification_emails')) {
+            update_option('rmgc_admin_notification_emails', get_option('admin_email'));
+        }
 
-    // Clear any existing scheduled tasks
-    wp_clear_scheduled_hook('rmgc_cleanup_old_logs');
-    // Schedule new tasks
-    if (!wp_next_scheduled('rmgc_cleanup_old_logs')) {
-        wp_schedule_event(time(), 'daily', 'rmgc_cleanup_old_logs');
+        // Clear any existing scheduled tasks
+        wp_clear_scheduled_hook('rmgc_cleanup_old_logs');
+        // Schedule new tasks
+        if (!wp_next_scheduled('rmgc_cleanup_old_logs')) {
+            wp_schedule_event(time(), 'daily', 'rmgc_cleanup_old_logs');
+        }
+    } catch (Exception $e) {
+        error_log('RMGC Booking activation error: ' . $e->getMessage());
+        wp_die('Error activating RMGC Booking plugin. Please check the error log for details.');
     }
 }
 
