@@ -5,6 +5,8 @@ if (!defined('ABSPATH')) {
 }
 
 function rmgc_booking_requests_page() {
+    global $wpdb;
+    
     // Get filters
     $current_filter = isset($_GET['filter']) ? sanitize_text_field($_GET['filter']) : 'all';
     $date_from = isset($_GET['date_from']) ? sanitize_text_field($_GET['date_from']) : '';
@@ -26,11 +28,29 @@ function rmgc_booking_requests_page() {
         $filters['search'] = $search;
     }
     
-    // Get bookings from database
+    // Debug log
+    error_log('Attempting to get bookings with filters: ' . print_r($filters, true));
+    
+    // Direct database query for debugging
+    $table_name = $wpdb->prefix . 'rmgc_bookings';
+    $query = "SELECT COUNT(*) FROM $table_name";
+    $count = $wpdb->get_var($query);
+    error_log("Total bookings in database: $count");
+    
+    // Get bookings using the function
     $bookings = rmgc_get_bookings($filters);
+    error_log('Retrieved bookings: ' . print_r($bookings, true));
     ?>
     <div class="wrap">
         <h1 class="wp-heading-inline">Booking Requests</h1>
+        
+        <!-- Debug info (temporary) -->
+        <?php if (current_user_can('manage_options')): ?>
+            <div class="notice notice-info">
+                <p>Total bookings in database: <?php echo esc_html($count); ?></p>
+                <p>Filters applied: <?php echo esc_html(print_r($filters, true)); ?></p>
+            </div>
+        <?php endif; ?>
         
         <!-- Filters -->
         <div class="tablenav top">
@@ -69,8 +89,8 @@ function rmgc_booking_requests_page() {
                 </tr>
             </thead>
             <tbody>
-                <?php if (!empty($bookings)) : ?>
-                    <?php foreach ($bookings as $booking) : ?>
+                <?php if (!empty($bookings)): ?>
+                    <?php foreach ($bookings as $booking): ?>
                         <tr>
                             <td>
                                 <?php echo esc_html(date('d/m/Y', strtotime($booking['date']))); ?>
@@ -83,7 +103,7 @@ function rmgc_booking_requests_page() {
                             <td><?php echo esc_html($booking['players']); ?></td>
                             <td><?php echo esc_html(implode(', ', array_map(function($pref) {
                                 return ucwords(str_replace('_', ' ', $pref));
-                            }, $booking['timePreferences']))); ?></td>
+                            }, is_array($booking['timePreferences']) ? $booking['timePreferences'] : array()))); ?></td>
                             <td><?php echo esc_html($booking['handicap']); ?></td>
                             <td><?php echo esc_html($booking['clubName']); ?></td>
                             <td>
@@ -93,10 +113,14 @@ function rmgc_booking_requests_page() {
                             </td>
                             <td>
                                 <?php 
-                                    echo esc_html(date('d/m/Y H:i', strtotime($booking['lastModified'])));
-                                    if ($booking['modifiedBy']) {
-                                        $user = get_userdata($booking['modifiedBy']);
-                                        echo '<br><small>by ' . esc_html($user->display_name) . '</small>';
+                                    if (!empty($booking['lastModified']) && $booking['lastModified'] !== '0000-00-00 00:00:00') {
+                                        echo esc_html(date('d/m/Y H:i', strtotime($booking['lastModified'])));
+                                        if (!empty($booking['modifiedBy'])) {
+                                            $user = get_userdata($booking['modifiedBy']);
+                                            echo '<br><small>by ' . esc_html($user ? $user->display_name : 'Unknown') . '</small>';
+                                        }
+                                    } else {
+                                        echo '<small>Not modified</small>';
                                     }
                                 ?>
                             </td>
@@ -104,7 +128,6 @@ function rmgc_booking_requests_page() {
                                 <?php if ($booking['status'] === 'pending'): ?>
                                     <button class="button action-button approve-booking" 
                                             data-id="<?php echo esc_attr($booking['id']); ?>"
-                                            data-date="<?php echo esc_attr($booking['date']); ?>"
                                             data-time-prefs='<?php echo esc_attr(json_encode($booking['timePreferences'])); ?>'>
                                         Approve
                                     </button>
@@ -114,14 +137,16 @@ function rmgc_booking_requests_page() {
                                     </button>
                                 <?php endif; ?>
                                 <button class="button action-button view-notes" 
-                                        data-id="<?php echo esc_attr($booking['id']); ?>"
                                         data-booking='<?php echo esc_attr(json_encode($booking)); ?>'>
-                                    Notes
+                                    <?php 
+                                        $note_count = !empty($booking['notes']) ? count($booking['notes']) : 0;
+                                        echo $note_count > 0 ? "Notes ($note_count)" : "Add Note";
+                                    ?>
                                 </button>
                             </td>
                         </tr>
                     <?php endforeach; ?>
-                <?php else : ?>
+                <?php else: ?>
                     <tr>
                         <td colspan="10">No booking requests found.</td>
                     </tr>
@@ -192,6 +217,14 @@ function rmgc_booking_requests_page() {
         .ui-dialog { z-index: 100102 !important; }
         .ui-dialog-titlebar { background: #0073aa; color: #fff; }
         .ui-button.ui-dialog-titlebar-close { color: #fff; }
+        
+        /* Debug info */
+        .debug-info {
+            background: #f8f9fa;
+            padding: 10px;
+            margin: 10px 0;
+            border-left: 4px solid #0073aa;
+        }
     </style>
     <?php
 }
