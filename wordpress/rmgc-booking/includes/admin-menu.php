@@ -1,110 +1,140 @@
 <?php
-// Add menu pages
-function rmgc_booking_admin_menu() {
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+// Add menu items
+function rmgc_add_admin_menu() {
     add_menu_page(
-        'RMGC Booking',
-        'RMGC Booking',
+        'RMGC Bookings',
+        'RMGC Bookings',
         'manage_options',
-        'rmgc-booking',
-        'rmgc_booking_requests_page',
+        'rmgc-bookings',
+        'rmgc_bookings_page',
         'dashicons-calendar-alt'
     );
     
     add_submenu_page(
-        'rmgc-booking',
-        'Booking Requests',
-        'Booking Requests',
-        'manage_options',
-        'rmgc-booking',
-        'rmgc_booking_requests_page'
-    );
-    
-    add_submenu_page(
-        'rmgc-booking',
-        'System Logs',
-        'System Logs',
-        'manage_options',
-        'rmgc-booking-logs',
-        'rmgc_booking_logs_page'
-    );
-    
-    add_submenu_page(
-        'rmgc-booking',
+        'rmgc-bookings',
         'Settings',
         'Settings',
         'manage_options',
-        'rmgc-booking-settings',
-        'rmgc_booking_settings_page'
+        'rmgc-settings',
+        'rmgc_settings_page'
     );
 }
-add_action('admin_menu', 'rmgc_booking_admin_menu');
+add_action('admin_menu', 'rmgc_add_admin_menu');
 
-// Add admin scripts and styles
+// Enqueue admin scripts
 function rmgc_admin_enqueue_scripts($hook) {
-    // Only load on our plugin pages
-    if (strpos($hook, 'rmgc-booking') === false) {
+    // Only load on our plugin's pages
+    if (strpos($hook, 'rmgc') === false) {
         return;
     }
     
-    wp_enqueue_script('jquery-ui-datepicker');
-    wp_enqueue_script('jquery-ui-dialog');
-    wp_enqueue_style('wp-jquery-ui-dialog');
-    wp_enqueue_style('jquery-ui-style', 'https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/themes/base/jquery-ui.min.css');
-    
     wp_enqueue_script(
-        'rmgc-admin-js',
+        'rmgc-admin',
         plugins_url('../js/admin.js', __FILE__),
-        array('jquery', 'jquery-ui-datepicker', 'jquery-ui-dialog'),
-        RMGC_BOOKING_VERSION,
+        array('jquery'),
+        time(),
         true
     );
     
-    wp_localize_script('rmgc-admin-js', 'rmgcAdmin', array(
+    wp_localize_script('rmgc-admin', 'rmgcAdmin', array(
         'ajaxurl' => admin_url('admin-ajax.php'),
         'nonce' => wp_create_nonce('rmgc_admin_nonce')
     ));
 }
 add_action('admin_enqueue_scripts', 'rmgc_admin_enqueue_scripts');
 
-// Include admin templates
-require_once RMGC_BOOKING_PATH . 'templates/admin/booking-list.php';
-
-// System logs page
-function rmgc_booking_logs_page() {
-    // Security check
-    if (!current_user_can('manage_options')) {
-        wp_die('Unauthorized access');
-    }
-    
-    $log_file = WP_CONTENT_DIR . '/rmgc-logs/rmgc-errors.log';
-    $log_content = 'No logs found.';
-    
-    if (file_exists($log_file)) {
-        $log_content = file_get_contents($log_file);
-        // Get last 1000 lines (or less if file is smaller)
-        $lines = explode("\n", $log_content);
-        $lines = array_slice($lines, -1000);
-        $log_content = implode("\n", $lines);
-    }
-    
-    // Clear logs if requested
-    if (isset($_POST['clear_logs']) && check_admin_referer('rmgc_clear_logs')) {
-        file_put_contents($log_file, '');
-        $log_content = 'Logs cleared.';
-        echo '<div class="notice notice-success"><p>Logs have been cleared.</p></div>';
-    }
+// Render bookings page
+function rmgc_bookings_page() {
+    $bookings = rmgc_get_bookings();
     ?>
     <div class="wrap">
-        <h1>System Logs</h1>
-        <div class="rmgc-logs-actions" style="margin: 20px 0;">
-            <form method="post" style="display: inline-block;">
-                <?php wp_nonce_field('rmgc_clear_logs'); ?>
-                <input type="submit" name="clear_logs" class="button" value="Clear Logs">
-            </form>
-        </div>
-        <div class="rmgc-logs-viewer" style="background: #fff; padding: 20px; border: 1px solid #ccc;">
-            <pre style="white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto;"><?php echo esc_html($log_content); ?></pre>
-        </div>
+        <h1>RMGC Bookings</h1>
+        
+        <table class="wp-list-table widefat fixed striped">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Players</th>
+                    <th>Time Preferences</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($bookings as $booking): ?>
+                <tr id="booking-<?php echo esc_attr($booking['id']); ?>">
+                    <td><?php echo esc_html($booking['date']); ?></td>
+                    <td><?php echo esc_html($booking['first_name'] . ' ' . $booking['last_name']); ?></td>
+                    <td><?php echo esc_html($booking['email']); ?></td>
+                    <td><?php echo esc_html($booking['players']); ?></td>
+                    <td><?php 
+                        $prefs = maybe_unserialize($booking['time_preferences']);
+                        echo esc_html(implode(', ', array_map(function($pref) {
+                            return ucwords(str_replace('_', ' ', $pref));
+                        }, $prefs)));
+                    ?></td>
+                    <td class="rmgc-status"><?php echo esc_html($booking['status']); ?></td>
+                    <td>
+                        <button class="button rmgc-approve-booking" data-booking-id="<?php echo esc_attr($booking['id']); ?>"
+                            <?php echo $booking['status'] === 'approved' ? 'disabled' : ''; ?>>
+                            Approve
+                        </button>
+                        <button class="button rmgc-reject-booking" data-booking-id="<?php echo esc_attr($booking['id']); ?>"
+                            <?php echo $booking['status'] === 'rejected' ? 'disabled' : ''; ?>>
+                            Reject
+                        </button>
+                        <div class="rmgc-notes-section">
+                            <textarea id="booking-note-<?php echo esc_attr($booking['id']); ?>" 
+                                    placeholder="Add a note"></textarea>
+                            <button class="button rmgc-add-note" 
+                                    data-booking-id="<?php echo esc_attr($booking['id']); ?>">
+                                Add Note
+                            </button>
+                            <div id="booking-notes-<?php echo esc_attr($booking['id']); ?>" class="rmgc-notes-container">
+                                <?php if (!empty($booking['notes'])): ?>
+                                    <?php foreach ($booking['notes'] as $note): ?>
+                                        <div class="rmgc-note">
+                                            <span class="note-date"><?php echo esc_html($note['date']); ?></span>
+                                            <p><?php echo esc_html($note['content']); ?></p>
+                                        </div>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
     </div>
+
+    <style>
+        .rmgc-notes-section {
+            margin-top: 10px;
+        }
+        .rmgc-notes-section textarea {
+            width: 100%;
+            margin-bottom: 5px;
+        }
+        .rmgc-notes-container {
+            margin-top: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .rmgc-note {
+            padding: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        .note-date {
+            font-size: 0.8em;
+            color: #666;
+        }
+    </style>
     <?php
 }
