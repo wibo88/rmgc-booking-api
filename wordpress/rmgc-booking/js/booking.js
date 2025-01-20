@@ -45,6 +45,32 @@ jQuery(document).ready(function($) {
         $('#custom-month-year').text(monthNames[month - 1] + ' ' + year);
     }
 
+    // Form validation helper
+    function validateForm(bookingData) {
+        if (!bookingData.date) {
+            return 'Please select a booking date';
+        }
+        if (!bookingData.players) {
+            return 'Please select the number of players';
+        }
+        if (!bookingData.handicap || bookingData.handicap > 24) {
+            return 'Please enter a valid handicap (maximum 24)';
+        }
+        if (!bookingData.email || !bookingData.email.includes('@')) {
+            return 'Please enter a valid email address';
+        }
+        if (!bookingData.firstName || !bookingData.lastName) {
+            return 'Please enter your full name';
+        }
+        if (!bookingData.phone) {
+            return 'Please enter your phone number';
+        }
+        if (bookingData.timePreferences.length === 0) {
+            return 'Please select at least one time preference';
+        }
+        return null;
+    }
+
     // Form submission handler
     $('#rmgc-booking').on('submit', async function(e) {
         e.preventDefault();
@@ -81,25 +107,11 @@ jQuery(document).ready(function($) {
                 timePreferences: timePreferences
             };
 
-            console.log('Form data:', bookingData);
-
             // Validate form data
             const validationError = validateForm(bookingData);
             if (validationError) {
                 throw new Error(validationError);
             }
-
-            // Get reCAPTCHA response
-            console.log('Getting reCAPTCHA response...');
-            const recaptchaResponse = grecaptcha.getResponse();
-            console.log('reCAPTCHA response length:', recaptchaResponse.length);
-            
-            if (!recaptchaResponse) {
-                throw new Error('Please complete the reCAPTCHA verification');
-            }
-
-            // Add reCAPTCHA response to booking data
-            bookingData.recaptchaResponse = recaptchaResponse;
 
             // Send to WordPress AJAX
             const response = await $.ajax({
@@ -112,17 +124,14 @@ jQuery(document).ready(function($) {
                 }
             });
 
-            console.log('Server response:', response);
-
             if (response.success) {
                 $('#rmgc-booking-message')
                     .removeClass('error')
                     .addClass('success')
                     .html('Your booking request has been submitted successfully. We will contact you shortly.');
                 
-                // Clear form and reset reCAPTCHA
+                // Clear form
                 $('#rmgc-booking')[0].reset();
-                grecaptcha.reset();
                 $('#bookingDate').val('');
             } else {
                 throw new Error(response.data || 'An error occurred processing your request');
@@ -134,40 +143,11 @@ jQuery(document).ready(function($) {
                 .removeClass('success')
                 .addClass('error')
                 .html('Error: ' + (error.message || 'An error occurred processing your request. Please try again.'));
-            
-            // Reset reCAPTCHA
-            grecaptcha.reset();
         } finally {
             // Reset button state
             submitButton.prop('disabled', false).text(originalButtonText);
         }
     });
-
-    // Form validation helper
-    function validateForm(bookingData) {
-        if (!bookingData.date) {
-            return 'Please select a booking date';
-        }
-        if (!bookingData.players) {
-            return 'Please select the number of players';
-        }
-        if (!bookingData.handicap || bookingData.handicap > 24) {
-            return 'Please enter a valid handicap (maximum 24)';
-        }
-        if (!bookingData.email || !bookingData.email.includes('@')) {
-            return 'Please enter a valid email address';
-        }
-        if (!bookingData.firstName || !bookingData.lastName) {
-            return 'Please enter your full name';
-        }
-        if (!bookingData.phone) {
-            return 'Please enter your phone number';
-        }
-        if (bookingData.timePreferences.length === 0) {
-            return 'Please select at least one time preference';
-        }
-        return null;
-    }
 
     // Handicap field validation
     $('#handicap').on('input', function() {
