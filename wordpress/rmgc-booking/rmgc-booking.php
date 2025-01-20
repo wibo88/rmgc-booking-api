@@ -27,6 +27,7 @@ require_once RMGC_BOOKING_PATH . 'includes/admin-menu.php';
 require_once RMGC_BOOKING_PATH . 'includes/shortcodes.php';
 require_once RMGC_BOOKING_PATH . 'includes/settings.php';
 require_once RMGC_BOOKING_PATH . 'includes/email.php';
+require_once RMGC_BOOKING_PATH . 'includes/smtp.php';      // Add SMTP support
 
 // Register activation hook
 register_activation_hook(__FILE__, 'rmgc_activate_plugin');
@@ -47,37 +48,17 @@ function rmgc_activate_plugin() {
     rmgc_log_error('Testing RMGC Booking log write access');
     
     // Set default options if not already set
+    $admin_email = get_option('admin_email');
     if (!get_option('rmgc_admin_notification_emails')) {
-        update_option('rmgc_admin_notification_emails', get_option('admin_email'));
+        update_option('rmgc_admin_notification_emails', $admin_email);
+    }
+    if (!get_option('rmgc_email_from_name')) {
+        update_option('rmgc_email_from_name', 'Royal Melbourne Golf Club');
+    }
+    if (!get_option('rmgc_email_from_address')) {
+        update_option('rmgc_email_from_address', $admin_email);
     }
 }
-
-// Initialize nonce for AJAX
-function rmgc_add_nonce() {
-    wp_localize_script('rmgc-booking-js', 'rmgcAjax', array(
-        'ajaxurl' => admin_url('admin-ajax.php'),
-        'nonce' => wp_create_nonce('rmgc_booking_nonce'),
-        'maxPlayers' => 4,
-        'maxHandicap' => 24,
-        'allowedDays' => array(1, 2, 5), // Monday, Tuesday, Friday
-        'messages' => array(
-            'invalidDate' => 'Please select a valid date (Monday, Tuesday, or Friday)',
-            'invalidHandicap' => 'Handicap must be between 0 and 24',
-            'invalidPlayers' => 'Number of players must be between 1 and 4',
-            'rateLimitExceeded' => 'Too many booking attempts. Please try again later.'
-        )
-    ));
-}
-add_action('wp_enqueue_scripts', 'rmgc_add_nonce');
-
-// Add admin nonce for backend operations
-function rmgc_add_admin_nonce() {
-    wp_localize_script('rmgc-admin-js', 'rmgcAdmin', array(
-        'ajaxurl' => admin_url('admin-ajax.php'),
-        'nonce' => wp_create_nonce('rmgc_admin_nonce')
-    ));
-}
-add_action('admin_enqueue_scripts', 'rmgc_add_admin_nonce');
 
 // Register deactivation hook
 register_deactivation_hook(__FILE__, 'rmgc_deactivate_plugin');
