@@ -20,10 +20,11 @@ function rmgc_create_bookings_table() {
         handicap int(3) NOT NULL,
         players int(1) NOT NULL,
         time_preferences text NOT NULL,
+        tee_time varchar(20),
         status varchar(20) DEFAULT 'pending',
+        notes text,
         created_at datetime DEFAULT CURRENT_TIMESTAMP,
         last_modified datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        notes text,
         PRIMARY KEY  (id),
         KEY idx_created_at (created_at),
         KEY idx_date (date),
@@ -100,7 +101,7 @@ function rmgc_get_bookings($args = array()) {
     
     $results = $wpdb->get_results($sql, ARRAY_A);
     
-    // Format the time preferences for each booking
+    // Format the results
     foreach ($results as &$booking) {
         $booking['timePreferences'] = maybe_unserialize($booking['time_preferences']);
         $booking['notes'] = !empty($booking['notes']) ? maybe_unserialize($booking['notes']) : array();
@@ -111,25 +112,35 @@ function rmgc_get_bookings($args = array()) {
         $booking['clubName'] = $booking['club_name'];
         $booking['clubState'] = $booking['club_state'];
         $booking['clubCountry'] = $booking['club_country'];
+        $booking['teeTime'] = $booking['tee_time'];
     }
     
     return $results;
 }
 
 // Function to update booking status
-function rmgc_update_booking_status($booking_id, $status) {
+function rmgc_update_booking_status($booking_id, $status, $tee_time = null) {
     global $wpdb;
     
     $table_name = $wpdb->prefix . 'rmgc_bookings';
     
+    $data = array(
+        'status' => $status,
+        'last_modified' => current_time('mysql')
+    );
+    
+    $format = array('%s', '%s');
+    
+    if ($status === 'approved' && !empty($tee_time)) {
+        $data['tee_time'] = $tee_time;
+        $format[] = '%s';
+    }
+    
     $result = $wpdb->update(
         $table_name,
-        array(
-            'status' => $status,
-            'last_modified' => current_time('mysql')
-        ),
+        $data,
         array('id' => $booking_id),
-        array('%s', '%s'),
+        $format,
         array('%d')
     );
     
@@ -137,7 +148,7 @@ function rmgc_update_booking_status($booking_id, $status) {
 }
 
 // Function to add a note to a booking
-function rmgc_add_booking_note($booking_id, $note) {
+function rmgc_add_booking_note($booking_id, $note_content) {
     global $wpdb;
     
     $table_name = $wpdb->prefix . 'rmgc_bookings';
@@ -148,12 +159,14 @@ function rmgc_add_booking_note($booking_id, $note) {
         $booking_id
     ));
     
+    // Initialize notes array
     $notes = !empty($booking->notes) ? maybe_unserialize($booking->notes) : array();
     
     // Add new note
     $notes[] = array(
         'date' => current_time('mysql'),
-        'content' => $note
+        'content' => $note_content,
+        'user_id' => get_current_user_id()
     );
     
     // Update booking
@@ -169,4 +182,34 @@ function rmgc_add_booking_note($booking_id, $note) {
     );
     
     return $result !== false;
+}
+
+// Function to get a single booking
+function rmgc_get_booking($booking_id) {
+    global $wpdb;
+    
+    $table_name = $wpdb->prefix . 'rmgc_bookings';
+    
+    $booking = $wpdb->get_row($wpdb->prepare(
+        "SELECT * FROM $table_name WHERE id = %d",
+        $booking_id
+    ), ARRAY_A);
+    
+    if (!$booking) {
+        return null;
+    }
+    
+    // Format the booking data
+    $booking['timePreferences'] = maybe_unserialize($booking['time_preferences']);
+    $booking['notes'] = !empty($booking['notes']) ? maybe_unserialize($booking['notes']) : array();
+    
+    // Convert snake_case to camelCase
+    $booking['firstName'] = $booking['first_name'];
+    $booking['lastName'] = $booking['last_name'];
+    $booking['clubName'] = $booking['club_name'];
+    $booking['clubState'] = $booking['club_state'];
+    $booking['clubCountry'] = $booking['club_country'];
+    $booking['teeTime'] = $booking['tee_time'];
+    
+    return $booking;
 }
