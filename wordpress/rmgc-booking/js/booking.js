@@ -1,6 +1,49 @@
 jQuery(document).ready(function($) {
-    // Initialize calendar...
-    [Previous calendar code remains the same]
+    // Initialize date picker with custom navigation
+    var calendar = $('#embedded-calendar').datepicker({
+        dateFormat: 'yy-mm-dd',
+        minDate: 0,
+        numberOfMonths: 1,
+        beforeShowDay: function(date) {
+            var day = date.getDay();
+            // Enable only Monday (1), Tuesday (2), and Friday (5)
+            return [(day === 1 || day === 2 || day === 5)];
+        },
+        onSelect: function(dateText) {
+            $('#bookingDate').val(dateText);
+        },
+        onChangeMonthYear: function(year, month) {
+            updateHeaderDate(year, month);
+        }
+    }).data('datepicker');
+
+    // Initial header update
+    var currentDate = new Date();
+    updateHeaderDate(currentDate.getFullYear(), currentDate.getMonth() + 1);
+
+    // Custom navigation handlers
+    $('#custom-prev').click(function() {
+        var current = $('#embedded-calendar').datepicker('getDate');
+        current.setMonth(current.getMonth() - 1);
+        $('#embedded-calendar').datepicker('setDate', current);
+        updateHeaderDate(current.getFullYear(), current.getMonth() + 1);
+    });
+
+    $('#custom-next').click(function() {
+        var current = $('#embedded-calendar').datepicker('getDate');
+        current.setMonth(current.getMonth() + 1);
+        $('#embedded-calendar').datepicker('setDate', current);
+        updateHeaderDate(current.getFullYear(), current.getMonth() + 1);
+    });
+
+    function updateHeaderDate(year, month) {
+        var monthNames = [
+            "January", "February", "March", "April",
+            "May", "June", "July", "August",
+            "September", "October", "November", "December"
+        ];
+        $('#custom-month-year').text(monthNames[month - 1] + ' ' + year);
+    }
 
     // Form submission handler
     $('#rmgc-booking').on('submit', async function(e) {
@@ -100,5 +143,37 @@ jQuery(document).ready(function($) {
         }
     });
 
-    // Validation functions remain the same
-})
+    // Form validation helper
+    function validateForm(bookingData) {
+        if (!bookingData.date) {
+            return 'Please select a booking date';
+        }
+        if (!bookingData.players) {
+            return 'Please select the number of players';
+        }
+        if (!bookingData.handicap || bookingData.handicap > 24) {
+            return 'Please enter a valid handicap (maximum 24)';
+        }
+        if (!bookingData.email || !bookingData.email.includes('@')) {
+            return 'Please enter a valid email address';
+        }
+        if (!bookingData.firstName || !bookingData.lastName) {
+            return 'Please enter your full name';
+        }
+        if (!bookingData.phone) {
+            return 'Please enter your phone number';
+        }
+        if (bookingData.timePreferences.length === 0) {
+            return 'Please select at least one time preference';
+        }
+        return null;
+    }
+
+    // Handicap field validation
+    $('#handicap').on('input', function() {
+        const value = parseInt($(this).val());
+        if (value > 24) {
+            $(this).val(24);
+        }
+    });
+});
