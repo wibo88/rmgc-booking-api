@@ -1,12 +1,23 @@
 jQuery(document).ready(function($) {
-    // Initialize tooltips
-    $('[data-toggle="tooltip"]').tooltip();
-
     // Approve booking
     $('.rmgc-approve-booking').on('click', function(e) {
         e.preventDefault();
         const bookingId = $(this).data('booking-id');
-        updateBookingStatus(bookingId, 'approved', $(this));
+        
+        // Show tee time dialog
+        const teeTime = prompt('Please enter the confirmed tee time (e.g., 8:30 AM):');
+        if (teeTime === null) {
+            return; // User cancelled
+        }
+        
+        // Validate tee time format
+        const timeRegex = /^(0?[1-9]|1[0-2]):[0-5][0-9]\s*[APap][Mm]$/;
+        if (!timeRegex.test(teeTime)) {
+            alert('Please enter a valid time in 12-hour format (e.g., 8:30 AM)');
+            return;
+        }
+        
+        updateBookingStatus(bookingId, 'approved', $(this), teeTime);
     });
 
     // Reject booking
@@ -21,7 +32,8 @@ jQuery(document).ready(function($) {
     // Add note
     $('.rmgc-add-note').on('click', function(e) {
         e.preventDefault();
-        const bookingId = $(this).data('booking-id');
+        const button = $(this);
+        const bookingId = button.data('booking-id');
         const noteInput = $(`#booking-note-${bookingId}`);
         const note = noteInput.val().trim();
         
@@ -30,7 +42,6 @@ jQuery(document).ready(function($) {
             return;
         }
 
-        const button = $(this);
         button.prop('disabled', true).text('Saving...');
 
         $.ajax({
@@ -73,7 +84,7 @@ jQuery(document).ready(function($) {
     });
 
     // Function to update booking status
-    function updateBookingStatus(bookingId, status, buttonElement) {
+    function updateBookingStatus(bookingId, status, buttonElement, teeTime = null) {
         const row = buttonElement.closest('tr');
         const statusCell = row.find('.rmgc-status');
         const originalStatus = statusCell.text();
@@ -94,12 +105,17 @@ jQuery(document).ready(function($) {
                 action: 'rmgc_update_booking_status',
                 booking_id: bookingId,
                 status: status,
+                tee_time: teeTime,
                 nonce: rmgcAdmin.nonce
             },
             success: function(response) {
                 if (response.success) {
                     // Update status display
-                    statusCell.html(status.charAt(0).toUpperCase() + status.slice(1))
+                    let statusText = status.charAt(0).toUpperCase() + status.slice(1);
+                    if (status === 'approved' && teeTime) {
+                        statusText += ` (${teeTime})`;
+                    }
+                    statusCell.html(statusText)
                         .removeClass('status-pending status-approved status-rejected')
                         .addClass('status-' + status);
                     
@@ -168,51 +184,4 @@ jQuery(document).ready(function($) {
             }
         }, 5000);
     }
-
-    // Bulk actions
-    $('#doaction, #doaction2').on('click', function(e) {
-        e.preventDefault();
-        
-        const select = $(this).prev('select');
-        const action = select.val();
-        
-        if (action === '-1') {
-            return;
-        }
-        
-        const checkedBoxes = $('input[name="booking[]"]:checked');
-        if (checkedBoxes.length === 0) {
-            alert('Please select at least one booking');
-            return;
-        }
-        
-        if (!confirm(`Are you sure you want to ${action} the selected bookings?`)) {
-            return;
-        }
-        
-        const bookingIds = checkedBoxes.map(function() {
-            return $(this).val();
-        }).get();
-        
-        $.ajax({
-            url: rmgcAdmin.ajaxurl,
-            method: 'POST',
-            data: {
-                action: 'rmgc_bulk_update_status',
-                booking_ids: bookingIds,
-                status: action,
-                nonce: rmgcAdmin.nonce
-            },
-            success: function(response) {
-                if (response.success) {
-                    location.reload();
-                } else {
-                    showMessage(response.data || 'Error updating bookings', 'error');
-                }
-            },
-            error: function() {
-                showMessage('Error updating bookings. Please try again.', 'error');
-            }
-        });
-    });
 });
