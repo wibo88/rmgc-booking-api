@@ -1,8 +1,8 @@
 <?php
 function rmgc_send_booking_notification($booking) {
-    // Get admin notification emails (support multiple recipients)
+    // Get admin notification emails
     $admin_emails = get_option('rmgc_admin_notification_emails', get_option('admin_email'));
-    $from_name = get_option('rmgc_email_from_name', get_bloginfo('name'));
+    $from_name = get_option('rmgc_email_from_name', 'Royal Melbourne Golf Club');
     $from_email = get_option('rmgc_email_from_address', get_option('admin_email'));
     
     // Format date
@@ -34,7 +34,7 @@ function rmgc_send_booking_notification($booking) {
         <style>
             body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
             .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background-color: #005b94; color: white; padding: 20px; text-align: center; }
+            .header { background-color: #d3bc8d; color: #333; padding: 20px; text-align: center; }
             .content { padding: 20px; background-color: #f9f9f9; }
             .footer { text-align: center; padding: 20px; font-size: 0.9em; color: #666; }
             .label { font-weight: bold; }
@@ -66,12 +66,13 @@ function rmgc_send_booking_notification($booking) {
             
             <div class='footer'>
                 <p>This is an automated message from your website's booking system.</p>
+                <p>To manage this booking, please visit the admin dashboard.</p>
             </div>
         </div>
     </body>
     </html>";
     
-    // Send to admin(s) - handle multiple recipients
+    // Send to admin(s)
     $admin_emails = array_map('trim', explode(',', $admin_emails));
     foreach ($admin_emails as $admin_email) {
         if (is_email($admin_email)) {
@@ -80,16 +81,19 @@ function rmgc_send_booking_notification($booking) {
     }
     
     // Send confirmation to visitor
-    $visitor_subject = get_option('rmgc_guest_email_subject', 'Booking Request Received - Royal Melbourne Golf Club');
+    $visitor_subject = "Booking Request Received - Royal Melbourne Golf Club";
     $visitor_message = "
     <html>
     <head>
         <style>
             body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
             .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background-color: #005b94; color: white; padding: 20px; text-align: center; }
+            .header { background-color: #d3bc8d; color: #333; padding: 20px; text-align: center; }
             .content { padding: 20px; background-color: #f9f9f9; }
             .footer { text-align: center; padding: 20px; font-size: 0.9em; color: #666; }
+            .important { font-weight: bold; }
+            ul { margin-left: 20px; padding-left: 0; }
+            li { margin-bottom: 10px; }
         </style>
     </head>
     <body>
@@ -103,25 +107,32 @@ function rmgc_send_booking_notification($booking) {
                 
                 <p>Thank you for your booking request at Royal Melbourne Golf Club. We have received your request for:</p>
                 
-                <ul>
-                    <li>Date: {$formatted_date}</li>
-                    <li>Players: {$booking['players']}</li>
-                    <li>Time Preferences: {$formatted_time_prefs}</li>
-                </ul>
+                <p>
+                    <strong>Date:</strong> {$formatted_date}<br>
+                    <strong>Number of Players:</strong> {$booking['players']}<br>
+                    <strong>Time Preferences:</strong> {$formatted_time_prefs}
+                </p>
                 
                 <p>Our team will review your request and contact you shortly to confirm your booking.</p>
                 
-                <p>Please note:</p>
+                <p class='important'>Please note the following important information:</p>
                 <ul>
                     <li>Bookings are subject to availability</li>
-                    <li>We require players to arrive 30 minutes before their tee time</li>
-                    <li>Proper golf attire is required</li>
-                    <li>Proof of handicap may be required on the day</li>
+                    <li>Please arrive 30 minutes before your confirmed tee time</li>
+                    <li>Proper golf attire is required (no denim, t-shirts, or cargo shorts)</li>
+                    <li>You will need to present proof of your current handicap on the day</li>
+                    <li>Green fees must be paid upon arrival</li>
                 </ul>
+                
+                <p class='important'>If you need to make any changes to your booking request or have any questions, please contact our Pro Shop:</p>
+                <p>
+                    Phone: (03) 9598 6755<br>
+                    Email: proshop@royalmelbourne.com.au
+                </p>
             </div>
             
             <div class='footer'>
-                <p>Royal Melbourne Golf Club</p>
+                <p><strong>Royal Melbourne Golf Club</strong></p>
                 <p>Thank you for choosing to play with us</p>
             </div>
         </div>
