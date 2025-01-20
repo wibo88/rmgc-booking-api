@@ -3,31 +3,6 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-// Add error logging function if not exists
-if (!function_exists('rmgc_log_error')) {
-    function rmgc_log_error($message, $context = array()) {
-        $log_dir = WP_CONTENT_DIR . '/rmgc-logs';
-        $log_file = $log_dir . '/rmgc-errors.log';
-        
-        // Ensure log directory exists
-        if (!file_exists($log_dir)) {
-            wp_mkdir_p($log_dir);
-        }
-        
-        // Format the log message
-        $timestamp = current_time('mysql');
-        $formatted_message = sprintf(
-            "[%s] %s\nContext: %s\n",
-            $timestamp,
-            $message,
-            json_encode($context, JSON_PRETTY_PRINT)
-        );
-        
-        // Append to log file
-        file_put_contents($log_file, $formatted_message . "\n", FILE_APPEND);
-    }
-}
-
 // Register API endpoints
 function rmgc_register_api_endpoints() {
     // Endpoint for creating bookings
