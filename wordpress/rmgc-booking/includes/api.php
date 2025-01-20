@@ -13,6 +13,7 @@ function rmgc_register_api_endpoints() {
     add_action('wp_ajax_rmgc_update_booking_status', 'rmgc_api_update_booking_status');
     add_action('wp_ajax_rmgc_add_booking_note', 'rmgc_api_add_booking_note');
     add_action('wp_ajax_rmgc_bulk_update_status', 'rmgc_api_bulk_update_status');
+    add_action('wp_ajax_rmgc_test_email', 'rmgc_api_test_email');
 }
 add_action('init', 'rmgc_register_api_endpoints');
 
@@ -70,31 +71,25 @@ function rmgc_api_update_booking_status() {
             throw new Exception('Security check failed');
         }
         
-        // Get and validate the booking ID and status
+        // Get and validate data
         $booking_id = isset($_POST['booking_id']) ? absint($_POST['booking_id']) : 0;
         $status = isset($_POST['status']) ? sanitize_text_field($_POST['status']) : '';
+        $tee_time = isset($_POST['tee_time']) ? sanitize_text_field($_POST['tee_time']) : null;
         
         if (!$booking_id || !in_array($status, array('pending', 'approved', 'rejected'))) {
             throw new Exception('Invalid booking ID or status');
         }
         
-        // Update the status
-        $result = rmgc_update_booking_status($booking_id, $status);
+        // Update the status and tee time
+        $result = rmgc_update_booking_status($booking_id, $status, $tee_time);
         if (!$result) {
             throw new Exception('Failed to update booking status');
         }
         
-        // Send status notification email if needed
+        // Send notification if approved/rejected
         if ($status === 'approved' || $status === 'rejected') {
             rmgc_send_status_notification($booking_id, $status);
         }
-        
-        // Log success
-        rmgc_log_error('Booking status updated', array(
-            'booking_id' => $booking_id,
-            'new_status' => $status,
-            'user_id' => get_current_user_id()
-        ));
         
         wp_send_json_success('Status updated successfully');
         
@@ -126,7 +121,7 @@ function rmgc_api_add_booking_note() {
         $note = isset($_POST['note']) ? sanitize_textarea_field($_POST['note']) : '';
         
         if (!$booking_id || empty($note)) {
-            throw new Exception('Invalid booking ID or note');
+            throw new Exception('Invalid booking ID or note content');
         }
         
         // Add the note
@@ -135,75 +130,65 @@ function rmgc_api_add_booking_note() {
             throw new Exception('Failed to add note');
         }
         
-        wp_send_json_success('Note added successfully');
+        wp_send_json_success(array(
+            'message' => 'Note added successfully',
+            'date' => current_time('mysql'),
+            'note' => $note
+        ));
         
     } catch (Exception $e) {
         rmgc_log_error('Note addition failed', array(
             'error' => $e->getMessage(),
-            'booking_id' => isset($booking_id) ? $booking_id : null
+            'booking_id' => isset($booking_id) ? $booking_id : null,
+            'note' => isset($note) ? $note : null
         ));
         wp_send_json_error($e->getMessage());
     }
 }
 
-// Handle bulk status updates
-function rmgc_api_bulk_update_status() {
+// Handle test email
+function rmgc_api_test_email() {
     try {
-        // Verify user has permission
         if (!current_user_can('manage_options')) {
             throw new Exception('Unauthorized access');
         }
         
-        // Verify nonce
-        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'rmgc_admin_nonce')) {
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'rmgc_test_email')) {
             throw new Exception('Security check failed');
         }
         
-        // Get and validate the booking IDs and status
-        $booking_ids = isset($_POST['booking_ids']) ? array_map('absint', $_POST['booking_ids']) : array();
-        $status = isset($_POST['status']) ? sanitize_text_field($_POST['status']) : '';
+        $admin_email = get_option('rmgc_admin_notification_emails', get_option('admin_email'));
+        $subject = 'RMGC Booking System - Test Email';
+        $message = "
+        <html>
+        <head>
+            <style>
+                body { font-family: Arial, sans-serif; line-height: 1.6; }
+            </style>
+        </head>
+        <body>
+            <h2>Test Email</h2>
+            <p>This is a test email from your RMGC Booking System.</p>
+            <p>If you're receiving this, your email settings are working correctly.</p>
+            <p>Time sent: " . current_time('mysql') . "</p>
+        </body>
+        </html>";
         
-        if (empty($booking_ids) || !in_array($status, array('approved', 'rejected'))) {
-            throw new Exception('Invalid booking IDs or status');
+        $headers = array(
+            'Content-Type: text/html; charset=UTF-8'
+        );
+        
+        $sent = wp_mail($admin_email, $subject, $message, $headers);
+        
+        if (!$sent) {
+            throw new Exception('Failed to send test email');
         }
         
-        // Update each booking
-        $success_count = 0;
-        $failed_ids = array();
-        
-        foreach ($booking_ids as $booking_id) {
-            $result = rmgc_update_booking_status($booking_id, $status);
-            if ($result) {
-                $success_count++;
-                // Send status notification
-                rmgc_send_status_notification($booking_id, $status);
-            } else {
-                $failed_ids[] = $booking_id;
-            }
-        }
-        
-        // Log results
-        rmgc_log_error('Bulk status update completed', array(
-            'total' => count($booking_ids),
-            'successful' => $success_count,
-            'failed' => $failed_ids,
-            'status' => $status
-        ));
-        
-        if (empty($failed_ids)) {
-            wp_send_json_success(sprintf('Successfully updated %d bookings', $success_count));
-        } else {
-            wp_send_json_error(sprintf('Updated %d bookings, failed to update bookings: %s', 
-                $success_count, 
-                implode(', ', $failed_ids)
-            ));
-        }
+        wp_send_json_success('Test email sent successfully');
         
     } catch (Exception $e) {
-        rmgc_log_error('Bulk status update failed', array(
-            'error' => $e->getMessage(),
-            'booking_ids' => isset($booking_ids) ? $booking_ids : null,
-            'status' => isset($status) ? $status : null
+        rmgc_log_error('Test email failed', array(
+            'error' => $e->getMessage()
         ));
         wp_send_json_error($e->getMessage());
     }
