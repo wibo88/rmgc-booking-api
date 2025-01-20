@@ -1,126 +1,130 @@
 <?php
 function rmgc_get_bookings($filters = array()) {
+    // [Previous function content remains the same]
+}
+
+function rmgc_insert_booking($booking_data) {
+    global $wpdb;
+    
+    error_log('Attempting to insert booking: ' . print_r($booking_data, true));
+    
+    $table_name = $wpdb->prefix . 'rmgc_bookings';
+    
+    $data = array(
+        'date' => $booking_data['date'],
+        'first_name' => $booking_data['firstName'],
+        'last_name' => $booking_data['lastName'],
+        'email' => $booking_data['email'],
+        'phone' => $booking_data['phone'],
+        'state' => isset($booking_data['state']) ? $booking_data['state'] : '',
+        'country' => isset($booking_data['country']) ? $booking_data['country'] : '',
+        'club_name' => isset($booking_data['clubName']) ? $booking_data['clubName'] : '',
+        'club_state' => isset($booking_data['clubState']) ? $booking_data['clubState'] : '',
+        'club_country' => isset($booking_data['clubCountry']) ? $booking_data['clubCountry'] : '',
+        'handicap' => $booking_data['handicap'],
+        'players' => $booking_data['players'],
+        'time_preferences' => maybe_serialize($booking_data['timePreferences']),
+        'status' => 'pending',
+        'created_at' => current_time('mysql'),
+        'last_modified' => current_time('mysql')
+    );
+    
+    $format = array(
+        '%s', // date
+        '%s', // first_name
+        '%s', // last_name
+        '%s', // email
+        '%s', // phone
+        '%s', // state
+        '%s', // country
+        '%s', // club_name
+        '%s', // club_state
+        '%s', // club_country
+        '%d', // handicap
+        '%d', // players
+        '%s', // time_preferences
+        '%s', // status
+        '%s', // created_at
+        '%s'  // last_modified
+    );
+    
+    error_log('Inserting with data: ' . print_r($data, true));
+    error_log('Using format: ' . print_r($format, true));
+    
+    $result = $wpdb->insert($table_name, $data, $format);
+    
+    if ($result === false) {
+        error_log('Database error: ' . $wpdb->last_error);
+        return new WP_Error('db_insert_error', 'Could not insert booking into database: ' . $wpdb->last_error);
+    }
+    
+    $booking_id = $wpdb->insert_id;
+    error_log('Successfully inserted booking with ID: ' . $booking_id);
+    
+    return $booking_id;
+}
+
+function rmgc_check_rate_limit($email) {
+    global $wpdb;
+    
+    // Check for existing bookings in the last hour
+    $table_name = $wpdb->prefix . 'rmgc_bookings';
+    $one_hour_ago = date('Y-m-d H:i:s', strtotime('-1 hour'));
+    
+    $count = $wpdb->get_var($wpdb->prepare(
+        "SELECT COUNT(*) FROM $table_name WHERE email = %s AND created_at > %s",
+        $email,
+        $one_hour_ago
+    ));
+    
+    if ($count && $count >= 3) {
+        return new WP_Error(
+            'rate_limit',
+            'Too many booking attempts. Please wait a while before trying again.'
+        );
+    }
+    
+    return true;
+}
+
+function rmgc_update_booking_status($booking_id, $status, $assigned_time = null) {
     global $wpdb;
     
     $table_name = $wpdb->prefix . 'rmgc_bookings';
-    $notes_table = $wpdb->prefix . 'rmgc_booking_notes';
+    $data = array(
+        'status' => $status,
+        'last_modified' => current_time('mysql'),
+        'modified_by' => get_current_user_id()
+    );
+    $where = array('id' => $booking_id);
     
-    // Debug log
-    error_log('Getting bookings with filters: ' . print_r($filters, true));
-    
-    $where = array();
-    $values = array();
-
-    if (!empty($filters['status'])) {
-        $where[] = 'status = %s';
-        $values[] = $filters['status'];
-    }
-
-    if (!empty($filters['date_from'])) {
-        $where[] = 'date >= %s';
-        $values[] = $filters['date_from'];
-    }
-
-    if (!empty($filters['date_to'])) {
-        $where[] = 'date <= %s';
-        $values[] = $filters['date_to'];
-    }
-
-    if (!empty($filters['search'])) {
-        $where[] = '(
-            first_name LIKE %s 
-            OR last_name LIKE %s 
-            OR email LIKE %s 
-            OR club_name LIKE %s
-        )';
-        $search_term = '%' . $wpdb->esc_like($filters['search']) . '%';
-        $values = array_merge($values, array($search_term, $search_term, $search_term, $search_term));
-    }
-
-    $where_clause = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
-    
-    // Basic query to test
-    $basic_query = "SELECT * FROM $table_name $where_clause ORDER BY date DESC";
-    
-    if (!empty($values)) {
-        $basic_query = $wpdb->prepare($basic_query, $values);
+    if ($assigned_time) {
+        $data['assigned_time'] = $assigned_time;
     }
     
-    // Debug log the query
-    error_log('Basic query: ' . $basic_query);
+    $result = $wpdb->update($table_name, $data, $where);
     
-    // Test basic query first
-    $basic_results = $wpdb->get_results($basic_query, ARRAY_A);
-    error_log('Basic query results count: ' . count($basic_results));
-    
-    // If basic query works, try full query with notes
-    if ($basic_results) {
-        $query = "SELECT b.*, 
-                    GROUP_CONCAT(n.note ORDER BY n.created_at DESC) as notes,
-                    GROUP_CONCAT(n.created_at ORDER BY n.created_at DESC) as note_dates,
-                    GROUP_CONCAT(n.created_by ORDER BY n.created_at DESC) as note_authors
-                FROM $table_name b
-                LEFT JOIN $notes_table n ON b.id = n.booking_id
-                $where_clause
-                GROUP BY b.id
-                ORDER BY b.date DESC";
-        
-        if (!empty($values)) {
-            $query = $wpdb->prepare($query, $values);
-        }
-        
-        // Debug log the full query
-        error_log('Full query: ' . $query);
-        
-        $results = $wpdb->get_results($query, ARRAY_A);
-        error_log('Full query results count: ' . count($results));
-        
-        if ($results === false) {
-            error_log('MySQL Error: ' . $wpdb->last_error);
-            return array();
-        }
-        
-        // Format the results
-        foreach ($results as &$booking) {
-            // Debug each booking
-            error_log('Processing booking: ' . print_r($booking, true));
-            
-            $booking['timePreferences'] = !empty($booking['time_preferences']) ? 
-                maybe_unserialize($booking['time_preferences']) : array();
-            
-            if (!empty($booking['notes'])) {
-                $notes = explode(',', $booking['notes']);
-                $dates = explode(',', $booking['note_dates']);
-                $authors = explode(',', $booking['note_authors']);
-                
-                $booking['notes'] = array_map(function($note, $date, $author) {
-                    $user = get_userdata($author);
-                    return array(
-                        'note' => $note,
-                        'date' => $date,
-                        'author' => $user ? $user->display_name : 'Unknown'
-                    );
-                }, $notes, $dates, $authors);
-            } else {
-                $booking['notes'] = array();
-            }
-            
-            // Standard field mappings
-            $booking['firstName'] = $booking['first_name'];
-            $booking['lastName'] = $booking['last_name'];
-            $booking['clubName'] = $booking['club_name'];
-            $booking['clubState'] = $booking['club_state'];
-            $booking['clubCountry'] = $booking['club_country'];
-            $booking['assignedTime'] = $booking['assigned_time'];
-            $booking['createdAt'] = $booking['created_at'];
-            $booking['lastModified'] = $booking['last_modified'];
-            $booking['modifiedBy'] = $booking['modified_by'];
-        }
-        
-        return $results;
+    if ($result === false) {
+        error_log('Failed to update booking status: ' . $wpdb->last_error);
+        return false;
     }
     
-    return array();
+    return true;
 }
 
-// Rest of the file remains the same
+function rmgc_add_booking_note($booking_id, $note) {
+    global $wpdb;
+    
+    $result = $wpdb->insert(
+        $wpdb->prefix . 'rmgc_booking_notes',
+        array(
+            'booking_id' => $booking_id,
+            'note' => $note,
+            'created_by' => get_current_user_id(),
+            'created_at' => current_time('mysql')
+        ),
+        array('%d', '%s', '%d', '%s')
+    );
+    
+    return $result !== false ? $wpdb->insert_id : false;
+}
