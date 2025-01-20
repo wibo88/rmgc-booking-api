@@ -21,6 +21,15 @@ function rmgc_booking_admin_menu() {
     
     add_submenu_page(
         'rmgc-booking',
+        'System Logs',
+        'System Logs',
+        'manage_options',
+        'rmgc-booking-logs',
+        'rmgc_booking_logs_page'
+    );
+    
+    add_submenu_page(
+        'rmgc-booking',
         'Settings',
         'Settings',
         'manage_options',
@@ -30,104 +39,43 @@ function rmgc_booking_admin_menu() {
 }
 add_action('admin_menu', 'rmgc_booking_admin_menu');
 
-// Enqueue admin scripts and styles
-function rmgc_admin_enqueue_scripts($hook) {
-    if ($hook != 'toplevel_page_rmgc-booking') {
-        return;
+function rmgc_booking_logs_page() {
+    // Security check
+    if (!current_user_can('manage_options')) {
+        wp_die('Unauthorized access');
     }
     
-    wp_enqueue_script('jquery-ui-datepicker');
-    wp_enqueue_script('jquery-ui-dialog');
-    wp_enqueue_style('wp-jquery-ui-dialog');
-    wp_enqueue_style('jquery-ui', 'https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/themes/base/jquery-ui.min.css');
+    $log_file = WP_CONTENT_DIR . '/rmgc-logs/rmgc-errors.log';
+    $log_content = 'No logs found.';
     
-    // Enqueue our custom admin JS
-    wp_enqueue_script('rmgc-admin-js', plugins_url('../js/admin.js', __FILE__), array('jquery', 'jquery-ui-datepicker', 'jquery-ui-dialog'), '1.0.0', true);
+    if (file_exists($log_file)) {
+        $log_content = file_get_contents($log_file);
+        // Get last 1000 lines (or less if file is smaller)
+        $lines = explode("\n", $log_content);
+        $lines = array_slice($lines, -1000);
+        $log_content = implode("\n", $lines);
+    }
     
-    // Pass admin nonce to JS
-    wp_localize_script('rmgc-admin-js', 'rmgcAdmin', array(
-        'nonce' => wp_create_nonce('rmgc_admin_nonce'),
-        'ajaxurl' => admin_url('admin-ajax.php')
-    ));
-}
-add_action('admin_enqueue_scripts', 'rmgc_admin_enqueue_scripts');
-
-// Register AJAX handlers
-add_action('wp_ajax_rmgc_update_booking_status', 'rmgc_handle_booking_status_update');
-add_action('wp_ajax_rmgc_add_booking_note', 'rmgc_handle_booking_note_add');
-
-function rmgc_handle_booking_status_update() {
-    try {
-        // Verify permissions
-        if (!current_user_can('manage_options')) {
-            throw new Exception('Unauthorized access');
-        }
-        
-        // Verify nonce
-        if (!check_ajax_referer('rmgc_admin_nonce', 'nonce', false)) {
-            throw new Exception('Security check failed');
-        }
-        
-        // Get and validate parameters
-        $booking_id = isset($_POST['booking_id']) ? absint($_POST['booking_id']) : 0;
-        $status = isset($_POST['status']) ? sanitize_text_field($_POST['status']) : '';
-        $assigned_time = isset($_POST['assigned_time']) ? sanitize_text_field($_POST['assigned_time']) : null;
-        $note = isset($_POST['note']) ? sanitize_text_field($_POST['note']) : '';
-        
-        if (!$booking_id || !in_array($status, array('approved', 'rejected'))) {
-            throw new Exception('Invalid parameters');
-        }
-        
-        // Update status
-        $result = rmgc_update_booking_status($booking_id, $status, $assigned_time);
-        if (!$result) {
-            throw new Exception('Failed to update booking status');
-        }
-        
-        // Add note if provided
-        if ($note) {
-            rmgc_add_booking_note($booking_id, $note);
-        }
-        
-        wp_send_json_success();
-        
-    } catch (Exception $e) {
-        wp_send_json_error($e->getMessage());
+    // Clear logs if requested
+    if (isset($_POST['clear_logs']) && check_admin_referer('rmgc_clear_logs')) {
+        file_put_contents($log_file, '');
+        $log_content = 'Logs cleared.';
+        echo '<div class="notice notice-success"><p>Logs have been cleared.</p></div>';
     }
+    ?>
+    <div class="wrap">
+        <h1>System Logs</h1>
+        <div class="rmgc-logs-actions" style="margin: 20px 0;">
+            <form method="post" style="display: inline-block;">
+                <?php wp_nonce_field('rmgc_clear_logs'); ?>
+                <input type="submit" name="clear_logs" class="button" value="Clear Logs">
+            </form>
+        </div>
+        <div class="rmgc-logs-viewer" style="background: #fff; padding: 20px; border: 1px solid #ccc;">
+            <pre style="white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto;"><?php echo esc_html($log_content); ?></pre>
+        </div>
+    </div>
+    <?php
 }
 
-function rmgc_handle_booking_note_add() {
-    try {
-        // Verify permissions
-        if (!current_user_can('manage_options')) {
-            throw new Exception('Unauthorized access');
-        }
-        
-        // Verify nonce
-        if (!check_ajax_referer('rmgc_admin_nonce', 'nonce', false)) {
-            throw new Exception('Security check failed');
-        }
-        
-        // Get and validate parameters
-        $booking_id = isset($_POST['booking_id']) ? absint($_POST['booking_id']) : 0;
-        $note = isset($_POST['note']) ? sanitize_text_field($_POST['note']) : '';
-        
-        if (!$booking_id || !$note) {
-            throw new Exception('Invalid parameters');
-        }
-        
-        // Add note
-        $result = rmgc_add_booking_note($booking_id, $note);
-        if (!$result) {
-            throw new Exception('Failed to add note');
-        }
-        
-        wp_send_json_success();
-        
-    } catch (Exception $e) {
-        wp_send_json_error($e->getMessage());
-    }
-}
-
-// Include admin templates
-require_once plugin_dir_path(__FILE__) . '../templates/admin/booking-list.php';
+// [Rest of the admin-menu.php file remains the same]
