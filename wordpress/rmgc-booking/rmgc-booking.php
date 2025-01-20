@@ -22,14 +22,13 @@ define('RMGC_BOOKING_URL', plugin_dir_url(__FILE__));
 define('RMGC_BOOKING_MIN_WP_VERSION', '5.8');
 define('RMGC_BOOKING_MIN_PHP_VERSION', '7.4');
 
-// Include required files
-require_once RMGC_BOOKING_PATH . 'includes/database.php';
+// Include WordPress core files needed for database operations
+require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
 
-// Register activation function
-function rmgc_activate_plugin() {
+// Create or update database tables
+function rmgc_create_tables() {
     global $wpdb;
     
-    // Create required tables
     $charset_collate = $wpdb->get_charset_collate();
     
     // Create bookings table
@@ -60,10 +59,17 @@ function rmgc_activate_plugin() {
         KEY idx_date (date),
         KEY idx_email (email)
     ) $charset_collate;";
-
+    
+    dbDelta($sql);
+    
+    // Check for errors
+    if ($wpdb->last_error) {
+        error_log('Error creating bookings table: ' . $wpdb->last_error);
+    }
+    
     // Create notes table
     $notes_table = $wpdb->prefix . 'rmgc_booking_notes';
-    $sql .= "CREATE TABLE IF NOT EXISTS $notes_table (
+    $sql = "CREATE TABLE IF NOT EXISTS $notes_table (
         id bigint(20) NOT NULL AUTO_INCREMENT,
         booking_id bigint(20) NOT NULL,
         note text NOT NULL,
@@ -73,9 +79,23 @@ function rmgc_activate_plugin() {
         KEY booking_id (booking_id),
         FOREIGN KEY (booking_id) REFERENCES $table_name(id) ON DELETE CASCADE
     ) $charset_collate;";
-
-    require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+    
     dbDelta($sql);
+    
+    // Check for errors
+    if ($wpdb->last_error) {
+        error_log('Error creating notes table: ' . $wpdb->last_error);
+    }
+}
+
+// Run table creation on plugin activation
+register_activation_hook(__FILE__, 'rmgc_activate_plugin');
+
+function rmgc_activate_plugin() {
+    error_log('Activating RMGC Booking plugin...');
+    
+    // Create database tables
+    rmgc_create_tables();
     
     // Create logs directory
     $log_dir = WP_CONTENT_DIR . '/rmgc-logs';
@@ -88,19 +108,18 @@ function rmgc_activate_plugin() {
     if (!get_option('rmgc_admin_notification_emails')) {
         update_option('rmgc_admin_notification_emails', get_option('admin_email'));
     }
-
-    // Clear and reschedule tasks
+    
+    // Schedule tasks
     wp_clear_scheduled_hook('rmgc_cleanup_old_logs');
     if (!wp_next_scheduled('rmgc_cleanup_old_logs')) {
         wp_schedule_event(time(), 'daily', 'rmgc_cleanup_old_logs');
     }
-
+    
     // Update version
     update_option('rmgc_version', RMGC_BOOKING_VERSION);
+    
+    error_log('RMGC Booking plugin activated successfully');
 }
-
-// Register activation hook
-register_activation_hook(__FILE__, 'rmgc_activate_plugin');
 
 // Version compatibility check
 function rmgc_version_check() {
@@ -127,9 +146,10 @@ function rmgc_version_check() {
     return true;
 }
 
-// Only load the plugin if version requirements are met
+// Only load if version requirements are met
 if (rmgc_version_check()) {
-    // Include remaining required files
+    // Include required files
+    require_once RMGC_BOOKING_PATH . 'includes/database.php';
     require_once RMGC_BOOKING_PATH . 'includes/init.php';
     require_once RMGC_BOOKING_PATH . 'includes/admin-menu.php';
     require_once RMGC_BOOKING_PATH . 'includes/shortcodes.php';
@@ -137,55 +157,24 @@ if (rmgc_version_check()) {
     require_once RMGC_BOOKING_PATH . 'includes/email.php';
     require_once RMGC_BOOKING_PATH . 'includes/api.php';
     require_once RMGC_BOOKING_PATH . 'includes/security.php';
+}
 
-    // Initialize nonce for AJAX
-    function rmgc_add_nonce() {
-        wp_localize_script('rmgc-booking-js', 'rmgcAjax', array(
-            'ajaxurl' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('rmgc_booking_nonce'),
-            'maxPlayers' => 4,
-            'maxHandicap' => 24,
-            'allowedDays' => array(1, 2, 5), // Monday, Tuesday, Friday
-            'messages' => array(
-                'invalidDate' => 'Please select a valid date (Monday, Tuesday, or Friday)',
-                'invalidHandicap' => 'Handicap must be between 0 and 24',
-                'invalidPlayers' => 'Number of players must be between 1 and 4',
-                'rateLimitExceeded' => 'Too many booking attempts. Please try again later.'
-            )
-        ));
-    }
-    add_action('wp_enqueue_scripts', 'rmgc_add_nonce');
+// Register deactivation hook
+register_deactivation_hook(__FILE__, 'rmgc_deactivate_plugin');
 
-    // Add admin nonce for backend operations
-    function rmgc_add_admin_nonce() {
-        wp_localize_script('rmgc-admin-js', 'rmgcAdmin', array(
-            'ajaxurl' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('rmgc_admin_nonce')
-        ));
-    }
-    add_action('admin_enqueue_scripts', 'rmgc_add_admin_nonce');
+function rmgc_deactivate_plugin() {
+    wp_clear_scheduled_hook('rmgc_cleanup_old_logs');
+}
 
-    // Register deactivation hook
-    register_deactivation_hook(__FILE__, 'rmgc_deactivate_plugin');
-
-    function rmgc_deactivate_plugin() {
-        // Clear any scheduled tasks
-        wp_clear_scheduled_hook('rmgc_cleanup_old_logs');
-    }
-
-    // Schedule log cleanup
-    add_action('rmgc_cleanup_old_logs', 'rmgc_cleanup_old_logs');
-    function rmgc_cleanup_old_logs() {
-        $log_dir = WP_CONTENT_DIR . '/rmgc-logs';
-        $log_file = $log_dir . '/rmgc-errors.log';
-        
-        if (file_exists($log_file)) {
-            // Keep only the last 1000 lines
-            $lines = file($log_file);
-            if (count($lines) > 1000) {
-                $lines = array_slice($lines, -1000);
-                file_put_contents($log_file, implode('', $lines));
-            }
+// Schedule log cleanup
+add_action('rmgc_cleanup_old_logs', 'rmgc_cleanup_old_logs');
+function rmgc_cleanup_old_logs() {
+    $log_file = WP_CONTENT_DIR . '/rmgc-logs/rmgc-errors.log';
+    if (file_exists($log_file)) {
+        $lines = file($log_file);
+        if (count($lines) > 1000) {
+            $lines = array_slice($lines, -1000);
+            file_put_contents($log_file, implode('', $lines));
         }
     }
 }
