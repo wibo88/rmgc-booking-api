@@ -64,29 +64,6 @@ function rmgc_insert_booking($booking_data) {
     return $booking_id;
 }
 
-function rmgc_check_rate_limit($email) {
-    global $wpdb;
-    
-    // Check for existing bookings in the last hour
-    $table_name = $wpdb->prefix . 'rmgc_bookings';
-    $one_hour_ago = date('Y-m-d H:i:s', strtotime('-1 hour'));
-    
-    $count = $wpdb->get_var($wpdb->prepare(
-        "SELECT COUNT(*) FROM $table_name WHERE email = %s AND created_at > %s",
-        $email,
-        $one_hour_ago
-    ));
-    
-    if ($count && $count >= 3) {
-        return new WP_Error(
-            'rate_limit',
-            'Too many booking attempts. Please wait a while before trying again.'
-        );
-    }
-    
-    return true;
-}
-
 function rmgc_update_booking_status($booking_id, $status, $assigned_time = null) {
     global $wpdb;
     
