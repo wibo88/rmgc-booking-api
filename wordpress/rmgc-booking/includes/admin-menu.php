@@ -20,35 +20,17 @@ function rmgc_add_admin_menu() {
         'Settings',
         'manage_options',
         'rmgc-settings',
-        'rmgc_settings_page'
+        'rmgc_booking_settings_page' // This should match the function name in settings.php
     );
 }
 add_action('admin_menu', 'rmgc_add_admin_menu');
 
-// Enqueue admin scripts
-function rmgc_admin_enqueue_scripts($hook) {
-    // Only load on our plugin's pages
-    if (strpos($hook, 'rmgc') === false) {
-        return;
-    }
-    
-    wp_enqueue_script(
-        'rmgc-admin',
-        plugins_url('../js/admin.js', __FILE__),
-        array('jquery'),
-        time(),
-        true
-    );
-    
-    wp_localize_script('rmgc-admin', 'rmgcAdmin', array(
-        'ajaxurl' => admin_url('admin-ajax.php'),
-        'nonce' => wp_create_nonce('rmgc_admin_nonce')
-    ));
-}
-add_action('admin_enqueue_scripts', 'rmgc_admin_enqueue_scripts');
-
 // Render bookings page
 function rmgc_bookings_page() {
+    if (!current_user_can('manage_options')) {
+        return;
+    }
+
     $bookings = rmgc_get_bookings();
     ?>
     <div class="wrap">
@@ -81,12 +63,14 @@ function rmgc_bookings_page() {
                     ?></td>
                     <td class="rmgc-status"><?php echo esc_html($booking['status']); ?></td>
                     <td>
-                        <button class="button rmgc-approve-booking" data-booking-id="<?php echo esc_attr($booking['id']); ?>"
-                            <?php echo $booking['status'] === 'approved' ? 'disabled' : ''; ?>>
+                        <button class="button rmgc-approve-booking" 
+                                data-booking-id="<?php echo esc_attr($booking['id']); ?>"
+                                <?php echo $booking['status'] === 'approved' ? 'disabled' : ''; ?>>
                             Approve
                         </button>
-                        <button class="button rmgc-reject-booking" data-booking-id="<?php echo esc_attr($booking['id']); ?>"
-                            <?php echo $booking['status'] === 'rejected' ? 'disabled' : ''; ?>>
+                        <button class="button rmgc-reject-booking" 
+                                data-booking-id="<?php echo esc_attr($booking['id']); ?>"
+                                <?php echo $booking['status'] === 'rejected' ? 'disabled' : ''; ?>>
                             Reject
                         </button>
                         <div class="rmgc-notes-section">
@@ -96,7 +80,8 @@ function rmgc_bookings_page() {
                                     data-booking-id="<?php echo esc_attr($booking['id']); ?>">
                                 Add Note
                             </button>
-                            <div id="booking-notes-<?php echo esc_attr($booking['id']); ?>" class="rmgc-notes-container">
+                            <div id="booking-notes-<?php echo esc_attr($booking['id']); ?>" 
+                                 class="rmgc-notes-container">
                                 <?php if (!empty($booking['notes'])): ?>
                                     <?php foreach ($booking['notes'] as $note): ?>
                                         <div class="rmgc-note">
