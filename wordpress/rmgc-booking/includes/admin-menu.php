@@ -39,6 +39,37 @@ function rmgc_booking_admin_menu() {
 }
 add_action('admin_menu', 'rmgc_booking_admin_menu');
 
+// Add admin scripts and styles
+function rmgc_admin_enqueue_scripts($hook) {
+    // Only load on our plugin pages
+    if (strpos($hook, 'rmgc-booking') === false) {
+        return;
+    }
+    
+    wp_enqueue_script('jquery-ui-datepicker');
+    wp_enqueue_script('jquery-ui-dialog');
+    wp_enqueue_style('wp-jquery-ui-dialog');
+    wp_enqueue_style('jquery-ui-style', 'https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/themes/base/jquery-ui.min.css');
+    
+    wp_enqueue_script(
+        'rmgc-admin-js',
+        plugins_url('../js/admin.js', __FILE__),
+        array('jquery', 'jquery-ui-datepicker', 'jquery-ui-dialog'),
+        RMGC_BOOKING_VERSION,
+        true
+    );
+    
+    wp_localize_script('rmgc-admin-js', 'rmgcAdmin', array(
+        'ajaxurl' => admin_url('admin-ajax.php'),
+        'nonce' => wp_create_nonce('rmgc_admin_nonce')
+    ));
+}
+add_action('admin_enqueue_scripts', 'rmgc_admin_enqueue_scripts');
+
+// Include admin templates
+require_once RMGC_BOOKING_PATH . 'templates/admin/booking-list.php';
+
+// System logs page
 function rmgc_booking_logs_page() {
     // Security check
     if (!current_user_can('manage_options')) {
@@ -77,5 +108,3 @@ function rmgc_booking_logs_page() {
     </div>
     <?php
 }
-
-// [Rest of the admin-menu.php file remains the same]
