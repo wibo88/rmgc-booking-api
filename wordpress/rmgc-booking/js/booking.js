@@ -72,7 +72,7 @@ jQuery(document).ready(function($) {
     }
 
     // Form submission handler
-    $('#rmgc-booking').on('submit', async function(e) {
+    $('#rmgc-booking').on('submit', function(e) {
         e.preventDefault();
         
         // Get selected time preferences
@@ -111,7 +111,10 @@ jQuery(document).ready(function($) {
         // Verify reCAPTCHA
         let recaptchaResponse;
         try {
+            console.log('Checking reCAPTCHA...'); // Debug log
             recaptchaResponse = grecaptcha.getResponse();
+            console.log('reCAPTCHA response:', recaptchaResponse ? 'received' : 'missing'); // Debug log
+            
             if (!recaptchaResponse) {
                 $('#rmgc-booking-message')
                     .removeClass('success')
@@ -139,44 +142,66 @@ jQuery(document).ready(function($) {
         const originalButtonText = submitButton.text();
         submitButton.prop('disabled', true).text('Submitting...');
 
-        try {
-            // Send to WordPress AJAX
-            const response = await $.ajax({
-                url: rmgcAjax.ajaxurl,
-                method: 'POST',
-                data: {
-                    action: 'rmgc_create_booking',
-                    nonce: rmgcAjax.nonce,
-                    booking: JSON.stringify(bookingData)
-                }
-            });
+        // Log the data we're about to send
+        console.log('Sending booking data:', {
+            action: 'rmgc_create_booking',
+            nonce: rmgcAjax.nonce,
+            booking: bookingData
+        });
 
-            if (response.success) {
-                $('#rmgc-booking-message')
-                    .removeClass('error')
-                    .addClass('success')
-                    .html('Your booking request has been submitted successfully. We will contact you shortly.');
+        // Send to WordPress AJAX
+        $.ajax({
+            url: rmgcAjax.ajaxurl,
+            method: 'POST',
+            data: {
+                action: 'rmgc_create_booking',
+                nonce: rmgcAjax.nonce,
+                booking: JSON.stringify(bookingData)
+            },
+            success: function(response) {
+                console.log('Server response:', response); // Debug log
                 
-                // Clear form and reset reCAPTCHA
-                $('#rmgc-booking')[0].reset();
+                if (response.success) {
+                    $('#rmgc-booking-message')
+                        .removeClass('error')
+                        .addClass('success')
+                        .html('Your booking request has been submitted successfully. We will contact you shortly.');
+                    
+                    // Clear form and reset reCAPTCHA
+                    $('#rmgc-booking')[0].reset();
+                    grecaptcha.reset();
+                    $('#bookingDate').val('');
+                } else {
+                    console.error('Response error:', response.data);
+                    $('#rmgc-booking-message')
+                        .removeClass('success')
+                        .addClass('error')
+                        .html('Error: ' + (response.data || 'An error occurred processing your request. Please try again.'));
+                    
+                    // Reset reCAPTCHA
+                    grecaptcha.reset();
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Ajax error:', {
+                    status: status,
+                    error: error,
+                    response: xhr.responseText
+                });
+                
+                $('#rmgc-booking-message')
+                    .removeClass('success')
+                    .addClass('error')
+                    .html('Error: An error occurred processing your request. Please try again.');
+                
+                // Reset reCAPTCHA
                 grecaptcha.reset();
-                $('#bookingDate').val('');
-            } else {
-                throw new Error(response.data || 'An error occurred processing your request.');
+            },
+            complete: function() {
+                // Reset button state
+                submitButton.prop('disabled', false).text(originalButtonText);
             }
-        } catch (error) {
-            console.error('Submission error:', error);
-            $('#rmgc-booking-message')
-                .removeClass('success')
-                .addClass('error')
-                .html('Error: ' + (error.message || 'An error occurred processing your request. Please try again.'));
-            
-            // Reset reCAPTCHA
-            grecaptcha.reset();
-        } finally {
-            // Reset button state
-            submitButton.prop('disabled', false).text(originalButtonText);
-        }
+        });
     });
 
     // Handicap field validation
