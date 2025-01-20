@@ -1,7 +1,9 @@
 <?php
 function rmgc_send_booking_notification($booking) {
-    // Get admin notification emails
+    // Get admin emails from settings
     $admin_emails = get_option('rmgc_admin_notification_emails', get_option('admin_email'));
+    
+    // Email configuration
     $from_name = get_option('rmgc_email_from_name', 'Royal Melbourne Golf Club');
     $from_email = get_option('rmgc_email_from_address', get_option('admin_email'));
     
@@ -15,17 +17,19 @@ function rmgc_send_booking_notification($booking) {
     }, $booking['timePreferences']);
     $formatted_time_prefs = implode(', ', $time_prefs);
     
-    // Get custom email subjects
-    $admin_subject = get_option('rmgc_admin_email_subject', 'New Booking Request - RMGC');
+    // Email headers
+    $headers = array(
+        'Content-Type: text/html; charset=UTF-8',
+        sprintf('From: %s <%s>', $from_name, $from_email)
+    );
+    
+    // Admin email content
+    $admin_subject = get_option('rmgc_admin_email_subject', 
+        'New Booking Request - {first_name} {last_name}');
     $admin_subject = str_replace(
         array('{first_name}', '{last_name}'),
         array($booking['firstName'], $booking['lastName']),
         $admin_subject
-    );
-    
-    $headers = array(
-        'Content-Type: text/html; charset=UTF-8',
-        sprintf('From: %s <%s>', $from_name, $from_email)
     );
     
     $admin_message = "
@@ -72,15 +76,20 @@ function rmgc_send_booking_notification($booking) {
     </body>
     </html>";
     
-    // Send to admin(s)
+    // Send admin notifications
     $admin_emails = array_map('trim', explode(',', $admin_emails));
     foreach ($admin_emails as $admin_email) {
         if (is_email($admin_email)) {
-            wp_mail($admin_email, $admin_subject, $admin_message, $headers);
+            $sent = wp_mail($admin_email, $admin_subject, $admin_message, $headers);
+            rmgc_log_error('Admin email attempt', array(
+                'email' => $admin_email,
+                'success' => $sent ? 'yes' : 'no',
+                'booking_id' => $booking['id'] ?? 'unknown'
+            ));
         }
     }
     
-    // Send confirmation to visitor
+    // Guest email content
     $visitor_subject = "Booking Request Received - Royal Melbourne Golf Club";
     $visitor_message = "
     <html>
@@ -139,12 +148,11 @@ function rmgc_send_booking_notification($booking) {
     </body>
     </html>";
     
-    wp_mail($booking['email'], $visitor_subject, $visitor_message, $headers);
-    
-    // Log email attempts
-    rmgc_log_error('Email notifications sent', array(
-        'admin_emails' => $admin_emails,
-        'guest_email' => $booking['email'],
-        'date' => $formatted_date
+    // Send guest confirmation
+    $sent = wp_mail($booking['email'], $visitor_subject, $visitor_message, $headers);
+    rmgc_log_error('Guest email attempt', array(
+        'email' => $booking['email'],
+        'success' => $sent ? 'yes' : 'no',
+        'booking_id' => $booking['id'] ?? 'unknown'
     ));
 }
