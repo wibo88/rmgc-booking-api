@@ -1,29 +1,37 @@
 jQuery(document).ready(function($) {
+    // Initialize tooltips
+    $('[data-toggle="tooltip"]').tooltip();
+
     // Approve booking
     $('.rmgc-approve-booking').on('click', function(e) {
         e.preventDefault();
-        var bookingId = $(this).data('booking-id');
-        updateBookingStatus(bookingId, 'approved');
+        const bookingId = $(this).data('booking-id');
+        updateBookingStatus(bookingId, 'approved', $(this));
     });
 
     // Reject booking
     $('.rmgc-reject-booking').on('click', function(e) {
         e.preventDefault();
-        var bookingId = $(this).data('booking-id');
-        updateBookingStatus(bookingId, 'rejected');
+        if (confirm('Are you sure you want to reject this booking?')) {
+            const bookingId = $(this).data('booking-id');
+            updateBookingStatus(bookingId, 'rejected', $(this));
+        }
     });
 
-    // Add notes
+    // Add note
     $('.rmgc-add-note').on('click', function(e) {
         e.preventDefault();
-        var bookingId = $(this).data('booking-id');
-        var noteInput = $('#booking-note-' + bookingId);
-        var note = noteInput.val();
+        const bookingId = $(this).data('booking-id');
+        const noteInput = $(`#booking-note-${bookingId}`);
+        const note = noteInput.val().trim();
         
         if (!note) {
             alert('Please enter a note');
             return;
         }
+
+        const button = $(this);
+        button.prop('disabled', true).text('Saving...');
 
         $.ajax({
             url: rmgcAdmin.ajaxurl,
@@ -36,26 +44,49 @@ jQuery(document).ready(function($) {
             },
             success: function(response) {
                 if (response.success) {
+                    // Add new note to display
+                    const notesContainer = $(`#booking-notes-${bookingId}`);
+                    const newNote = $(`
+                        <div class="rmgc-note">
+                            <span class="note-date">${new Date().toLocaleString()}</span>
+                            <p>${note}</p>
+                        </div>
+                    `);
+                    notesContainer.prepend(newNote);
+                    
+                    // Clear input
                     noteInput.val('');
-                    // Reload notes display or append new note
-                    var notesContainer = $('#booking-notes-' + bookingId);
-                    var newNote = '<div class="rmgc-note">' + 
-                                '<span class="note-date">' + new Date().toLocaleString() + '</span>' +
-                                '<p>' + note + '</p>' +
-                                '</div>';
-                    notesContainer.append(newNote);
+                    
+                    // Show success message
+                    showMessage('Note added successfully', 'success');
                 } else {
-                    alert('Error adding note: ' + response.data);
+                    showMessage(response.data || 'Error adding note', 'error');
                 }
             },
             error: function() {
-                alert('Error adding note. Please try again.');
+                showMessage('Error adding note. Please try again.', 'error');
+            },
+            complete: function() {
+                button.prop('disabled', false).text('Add Note');
             }
         });
     });
 
     // Function to update booking status
-    function updateBookingStatus(bookingId, status) {
+    function updateBookingStatus(bookingId, status, buttonElement) {
+        const row = buttonElement.closest('tr');
+        const statusCell = row.find('.rmgc-status');
+        const originalStatus = statusCell.text();
+        const approveButton = row.find('.rmgc-approve-booking');
+        const rejectButton = row.find('.rmgc-reject-booking');
+        
+        // Disable buttons during update
+        approveButton.prop('disabled', true);
+        rejectButton.prop('disabled', true);
+        
+        // Show loading state
+        statusCell.html('<em>Updating...</em>');
+
         $.ajax({
             url: rmgcAdmin.ajaxurl,
             method: 'POST',
@@ -67,28 +98,121 @@ jQuery(document).ready(function($) {
             },
             success: function(response) {
                 if (response.success) {
-                    // Update UI
-                    var row = $('#booking-' + bookingId);
-                    row.find('.rmgc-status').text(status);
+                    // Update status display
+                    statusCell.html(status.charAt(0).toUpperCase() + status.slice(1))
+                        .removeClass('status-pending status-approved status-rejected')
+                        .addClass('status-' + status);
                     
                     // Update button states
                     if (status === 'approved') {
-                        row.find('.rmgc-approve-booking').prop('disabled', true);
-                        row.find('.rmgc-reject-booking').prop('disabled', false);
+                        approveButton.prop('disabled', true);
+                        rejectButton.prop('disabled', false);
                     } else if (status === 'rejected') {
-                        row.find('.rmgc-approve-booking').prop('disabled', false);
-                        row.find('.rmgc-reject-booking').prop('disabled', true);
+                        approveButton.prop('disabled', false);
+                        rejectButton.prop('disabled', true);
                     }
                     
-                    // Show success message
-                    alert('Booking status updated successfully');
+                    showMessage('Booking status updated successfully', 'success');
                 } else {
-                    alert('Error updating booking status: ' + response.data);
+                    // Revert status on error
+                    statusCell.text(originalStatus);
+                    approveButton.prop('disabled', originalStatus === 'approved');
+                    rejectButton.prop('disabled', originalStatus === 'rejected');
+                    
+                    showMessage(response.data || 'Error updating status', 'error');
                 }
             },
             error: function() {
-                alert('Error updating booking status. Please try again.');
+                // Revert on error
+                statusCell.text(originalStatus);
+                approveButton.prop('disabled', originalStatus === 'approved');
+                rejectButton.prop('disabled', originalStatus === 'rejected');
+                
+                showMessage('Error updating status. Please try again.', 'error');
             }
         });
     }
+
+    // Function to show messages
+    function showMessage(message, type = 'info') {
+        const messageDiv = $('<div>')
+            .addClass('notice')
+            .addClass(type === 'error' ? 'notice-error' : 'notice-success')
+            .addClass('is-dismissible')
+            .html(`<p>${message}</p>`)
+            .hide();
+
+        $('.wrap > h1').after(messageDiv);
+        messageDiv.slideDown();
+
+        // Add dismiss button
+        const dismissButton = $('<button>')
+            .attr('type', 'button')
+            .addClass('notice-dismiss')
+            .html('<span class="screen-reader-text">Dismiss this notice.</span>');
+        
+        messageDiv.append(dismissButton);
+
+        dismissButton.on('click', function() {
+            messageDiv.slideUp(function() {
+                $(this).remove();
+            });
+        });
+
+        // Auto dismiss after 5 seconds
+        setTimeout(function() {
+            if (messageDiv.is(':visible')) {
+                messageDiv.slideUp(function() {
+                    $(this).remove();
+                });
+            }
+        }, 5000);
+    }
+
+    // Bulk actions
+    $('#doaction, #doaction2').on('click', function(e) {
+        e.preventDefault();
+        
+        const select = $(this).prev('select');
+        const action = select.val();
+        
+        if (action === '-1') {
+            return;
+        }
+        
+        const checkedBoxes = $('input[name="booking[]"]:checked');
+        if (checkedBoxes.length === 0) {
+            alert('Please select at least one booking');
+            return;
+        }
+        
+        if (!confirm(`Are you sure you want to ${action} the selected bookings?`)) {
+            return;
+        }
+        
+        const bookingIds = checkedBoxes.map(function() {
+            return $(this).val();
+        }).get();
+        
+        $.ajax({
+            url: rmgcAdmin.ajaxurl,
+            method: 'POST',
+            data: {
+                action: 'rmgc_bulk_update_status',
+                booking_ids: bookingIds,
+                status: action,
+                nonce: rmgcAdmin.nonce
+            },
+            success: function(response) {
+                if (response.success) {
+                    location.reload();
+                } else {
+                    showMessage(response.data || 'Error updating bookings', 'error');
+                }
+            },
+            error: function() {
+                showMessage('Error updating bookings. Please try again.', 'error');
+            }
+        });
+    });
 });
