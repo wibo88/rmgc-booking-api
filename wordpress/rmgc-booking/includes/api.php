@@ -12,14 +12,6 @@ function rmgc_register_api_endpoints() {
     add_action('wp_ajax_rmgc_update_booking_status', 'rmgc_api_update_booking_status');
 }
 
-// Debug logging helper
-function rmgc_log($message, $data = null) {
-    error_log('RMGC Booking: ' . $message);
-    if ($data !== null) {
-        error_log('Data: ' . print_r($data, true));
-    }
-}
-
 // Handle booking creation
 function rmgc_api_create_booking() {
     rmgc_log('=== Start Booking Creation ===');
@@ -129,4 +121,49 @@ function rmgc_api_create_booking() {
     }
 }
 
-// Other functions remain the same...
+// Handle booking status updates
+function rmgc_api_update_booking_status() {
+    try {
+        // Verify permissions
+        if (!current_user_can('manage_options')) {
+            throw new Exception('Unauthorized access');
+        }
+        
+        // Verify nonce
+        if (!check_ajax_referer('rmgc_admin_nonce', 'nonce', false)) {
+            throw new Exception('Security check failed');
+        }
+        
+        // Get and validate parameters
+        $booking_id = isset($_POST['booking_id']) ? absint($_POST['booking_id']) : 0;
+        $status = isset($_POST['status']) ? sanitize_text_field($_POST['status']) : '';
+        $assigned_time = isset($_POST['assigned_time']) ? sanitize_text_field($_POST['assigned_time']) : null;
+        $note = isset($_POST['note']) ? sanitize_text_field($_POST['note']) : '';
+        
+        if (!$booking_id || !in_array($status, array('approved', 'rejected'))) {
+            throw new Exception('Invalid parameters');
+        }
+        
+        // Update status
+        $result = rmgc_update_booking_status($booking_id, $status, $assigned_time);
+        if ($result === false) {
+            rmgc_log('Failed to update booking status. Booking ID: ' . $booking_id);
+            throw new Exception('Failed to update booking status');
+        }
+        
+        // Add note if provided
+        if ($note) {
+            $note_result = rmgc_add_booking_note($booking_id, $note);
+            if ($note_result === false) {
+                rmgc_log('Failed to add booking note. Booking ID: ' . $booking_id);
+                // Don't throw - status update was successful
+            }
+        }
+        
+        wp_send_json_success();
+        
+    } catch (Exception $e) {
+        rmgc_log('Admin booking update error: ' . $e->getMessage());
+        wp_send_json_error($e->getMessage());
+    }
+}
