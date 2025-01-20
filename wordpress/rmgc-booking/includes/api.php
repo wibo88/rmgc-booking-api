@@ -17,11 +17,13 @@ function rmgc_api_create_booking() {
     try {
         // Get and decode the booking data
         if (!isset($_POST['booking'])) {
+            error_log('No booking data received in POST request');
             throw new Exception('No booking data received');
         }
         
         $booking_data = json_decode(stripslashes($_POST['booking']), true);
         if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log('JSON decode error: ' . json_last_error_msg());
             throw new Exception('Invalid booking data format: ' . json_last_error_msg());
         }
 
@@ -30,24 +32,11 @@ function rmgc_api_create_booking() {
         
         // Verify nonce
         if (!check_ajax_referer('rmgc_booking_nonce', 'nonce', false)) {
+            error_log('Nonce verification failed');
             throw new Exception('Security check failed');
         }
         
-        // Verify reCAPTCHA
-        if (empty($booking_data['recaptchaResponse'])) {
-            throw new Exception('Please complete the reCAPTCHA verification');
-        }
-        
-        $recaptcha_result = rmgc_verify_recaptcha($booking_data['recaptchaResponse']);
-        if (is_wp_error($recaptcha_result)) {
-            error_log('reCAPTCHA verification failed: ' . $recaptcha_result->get_error_message());
-            throw new Exception($recaptcha_result->get_error_message());
-        }
-        
-        // Remove recaptcha response from booking data
-        unset($booking_data['recaptchaResponse']);
-        
-        // Validate required fields
+        // Check required fields
         $required_fields = array(
             'firstName' => 'First Name',
             'lastName' => 'Last Name',
@@ -61,20 +50,24 @@ function rmgc_api_create_booking() {
         
         foreach ($required_fields as $field => $label) {
             if (empty($booking_data[$field])) {
+                error_log("Missing required field: $field");
                 throw new Exception($label . ' is required');
             }
         }
         
         // Additional validation
         if (!filter_var($booking_data['email'], FILTER_VALIDATE_EMAIL)) {
+            error_log('Invalid email format: ' . $booking_data['email']);
             throw new Exception('Please enter a valid email address');
         }
         
         if ($booking_data['handicap'] > 24) {
+            error_log('Handicap too high: ' . $booking_data['handicap']);
             throw new Exception('Maximum handicap allowed is 24');
         }
         
         if (!in_array($booking_data['players'], array('1', '2', '3', '4'))) {
+            error_log('Invalid number of players: ' . $booking_data['players']);
             throw new Exception('Invalid number of players');
         }
         
@@ -82,12 +75,14 @@ function rmgc_api_create_booking() {
         $booking_date = new DateTime($booking_data['date']);
         $day_of_week = $booking_date->format('N'); // 1 (Mon) through 7 (Sun)
         if (!in_array($day_of_week, array(1, 2, 5))) {
+            error_log('Invalid booking day: ' . $day_of_week);
             throw new Exception('Bookings are only available on Monday, Tuesday, and Friday');
         }
         
         // Check rate limiting
         $rate_limit_check = rmgc_check_rate_limit($booking_data['email']);
         if (is_wp_error($rate_limit_check)) {
+            error_log('Rate limit exceeded for email: ' . $booking_data['email']);
             throw new Exception($rate_limit_check->get_error_message());
         }
         
@@ -117,47 +112,6 @@ function rmgc_api_create_booking() {
         
         wp_send_json_error($e->getMessage());
     }
-}
-
-/**
- * Verify reCAPTCHA response
- */
-function rmgc_verify_recaptcha($recaptcha_response) {
-    if (empty($recaptcha_response)) {
-        return new WP_Error('recaptcha_missing', 'Please complete the reCAPTCHA verification');
-    }
-    
-    $secret_key = get_option('rmgc_recaptcha_secret_key');
-    if (empty($secret_key)) {
-        error_log('reCAPTCHA secret key not configured');
-        return new WP_Error('recaptcha_config', 'Security verification configuration error');
-    }
-    
-    $verify_url = 'https://www.google.com/recaptcha/api/siteverify';
-    $response = wp_remote_post($verify_url, array(
-        'timeout' => 30,
-        'body' => array(
-            'secret' => $secret_key,
-            'response' => $recaptcha_response,
-            'remoteip' => $_SERVER['REMOTE_ADDR']
-        )
-    ));
-    
-    if (is_wp_error($response)) {
-        error_log('reCAPTCHA API error: ' . $response->get_error_message());
-        return new WP_Error('recaptcha_error', 'Security verification failed. Please try again.');
-    }
-    
-    $body = wp_remote_retrieve_body($response);
-    $result = json_decode($body, true);
-    
-    if (!isset($result['success']) || !$result['success']) {
-        $error_codes = isset($result['error-codes']) ? implode(', ', $result['error-codes']) : '';
-        error_log('reCAPTCHA validation failed. Error codes: ' . $error_codes);
-        return new WP_Error('recaptcha_failed', 'Security verification failed. Please try again.');
-    }
-    
-    return true;
 }
 
 // Handle booking status updates
